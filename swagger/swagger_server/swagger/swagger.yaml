@@ -38,10 +38,7 @@ paths:
           description: "Ephemeris time"
           schema:
             type: "number"
+            example: 4.831226068520247E8
         "400":
           description: "bad input parameter"
       x-swagger-router-controller: "swagger_server.controllers.default_controller"
-definitions:
-  InventoryItem:
-    type: "integer"
-    example: 483122606.85202467441558837890625
