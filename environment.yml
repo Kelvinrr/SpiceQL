@@ -1,18 +1,21 @@
 channels:
-  - tudat-team
   - defaults
   - conda-forge
   - usgs-astrogeology
+  - tudat-team
 
 dependencies:
-  - cmake 
+  - cmake
   - cspice-cmake
   - cpp-filesystem
   - doxygen
   - fmt
   - ninja
   - pip
-  - python
+  - pytest
+  - python>=3
+  - swig
+  - jsonschema
   - pip:
     - breathe
     - sphinx-material
