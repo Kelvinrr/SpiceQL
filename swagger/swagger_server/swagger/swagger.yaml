@@ -44,4 +44,4 @@ paths:
 definitions:
   InventoryItem:
     type: "integer"
-    example: 4.831226068520247E8
+    example: 483122606.85202467441558837890625
