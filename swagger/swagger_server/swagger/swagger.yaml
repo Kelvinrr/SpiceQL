@@ -1,0 +1,47 @@
+---
+swagger: "2.0"
+info:
+  description: "This is a simple API"
+  version: "1.0.0"
+  title: "SpiceQL"
+  contact:
+    email: "you@your-company.com"
+  license:
+    name: "Apache 2.0"
+    url: "http://www.apache.org/licenses/LICENSE-2.0.html"
+host: "virtserver.swaggerhub.com"
+basePath: "/USGS-Astro/SpiceQL/1.0.0"
+schemes:
+- "https"
+paths:
+  /sclkToEt:
+    get:
+      summary: "Coverts an SCLK string to an ephemeris time"
+      description: "By passing in the appropriate options, you can search for\navailable\
+        \ inventory in the system\n"
+      operationId: "sclck_to_et"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "mission"
+        in: "query"
+        description: "NAIF name for the mission"
+        required: true
+        type: "string"
+      - name: "sclk"
+        in: "query"
+        description: "SCLK string"
+        required: true
+        type: "string"
+      responses:
+        "200":
+          description: "Ephemeris time"
+          schema:
+            type: "number"
+        "400":
+          description: "bad input parameter"
+      x-swagger-router-controller: "swagger_server.controllers.default_controller"
+definitions:
+  InventoryItem:
+    type: "integer"
+    example: 4.831226068520247E8
