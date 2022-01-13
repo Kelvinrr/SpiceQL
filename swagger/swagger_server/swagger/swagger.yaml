@@ -16,10 +16,10 @@ schemes:
 paths:
   /sclkToEt:
     get:
-      summary: "Coverts an SCLK string to an ephemeris time"
-      description: "By passing in the appropriate options, you can search for\navailable\
-        \ inventory in the system\n"
-      operationId: "sclck_to_et"
+      summary: "Converts an SCLK string to an ephemeris time"
+      description: "By passing in the mission and valid SCLK string, get the ephemeris\
+        \ time\n"
+      operationId: "sclktoet"
       produces:
       - "application/json"
       parameters:
@@ -38,7 +38,30 @@ paths:
           description: "Ephemeris time"
           schema:
             type: "number"
-            example: 4.831226068520247E8
+            example: 483122606.85202467441558837890625
+        "400":
+          description: "bad input parameter"
+      x-swagger-router-controller: "swagger_server.controllers.default_controller"
+  /utcToEt:
+    get:
+      summary: "Returns list of missions that are currently supported"
+      description: "By passing in UTC string, get the ephemeris time\n"
+      operationId: "avail_missions"
+      produces:
+      - "application/json"
+      parameters:
+      - name: "utc"
+        in: "query"
+        description: "UTC string"
+        required: true
+        type: "string"
+        format: "date-time"
+      responses:
+        "200":
+          description: "Ephemeris time"
+          schema:
+            type: "number"
+            example: 483122606.85202467441558837890625
         "400":
           description: "bad input parameter"
       x-swagger-router-controller: "swagger_server.controllers.default_controller"

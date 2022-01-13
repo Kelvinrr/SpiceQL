@@ -1,18 +1,27 @@
 import connexion
 import six
-import logging 
 
 from swagger_server import util
 
-from flask import request
-app = connexion.App("SpiceQL", specification_dir="./swagger/")
 
-import pyspiceql as pql
+def avail_missions(utc):  # noqa: E501
+    """Returns list of missions that are currently supported
 
-def sclck_to_et(mission, sclk):  # noqa: E501
-    """Coverts an SCLK string to an ephemeris time
+    By passing in UTC string, get the ephemeris time  # noqa: E501
 
-    By passing in the appropriate options, you can search for available inventory in the system  # noqa: E501
+    :param utc: UTC string
+    :type utc: str
+
+    :rtype: float
+    """
+    utc = util.deserialize_datetime(utc)
+    return 'do some magic!'
+
+
+def sclktoet(mission, sclk):  # noqa: E501
+    """Converts an SCLK string to an ephemeris time
+
+    By passing in the mission and valid SCLK string, get the ephemeris time  # noqa: E501
 
     :param mission: NAIF name for the mission
     :type mission: str
@@ -21,11 +30,4 @@ def sclck_to_et(mission, sclk):  # noqa: E501
 
     :rtype: float
     """
-    app.app.logger.info(f"sclktoet({mission}, {sclk})")
-    try: 
-        et = pql.sclkToEt(mission, sclk)
-        app.app.logger.info("Ephemeris Time Returned: ", et)
-        return et
-    except Exception as e: 
-        return str(e), 400
-
+    return 'do some magic!'
