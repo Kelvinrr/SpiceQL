@@ -18,7 +18,7 @@ class TestDefaultController(BaseTestCase):
         """
         query_string = [('utc', '2013-10-20T19:20:30+01:00')]
         response = self.client.open(
-            '/USGS-Astro/SpiceQL/1.0.0/utcToEt',
+            '/USGS-Astro/SpiceQL/1.0.0/utctoet',
             method='GET',
             query_string=query_string)
         self.assert200(response,
@@ -32,7 +32,7 @@ class TestDefaultController(BaseTestCase):
         query_string = [('mission', 'mission_example'),
                         ('sclk', 'sclk_example')]
         response = self.client.open(
-            '/USGS-Astro/SpiceQL/1.0.0/sclkToEt',
+            '/USGS-Astro/SpiceQL/1.0.0/sclktoet',
             method='GET',
             query_string=query_string)
         self.assert200(response,

@@ -14,7 +14,7 @@ basePath: "/USGS-Astro/SpiceQL/1.0.0"
 schemes:
 - "https"
 paths:
-  /sclkToEt:
+  /sclktoet:
     get:
       summary: "Converts an SCLK string to an ephemeris time"
       description: "By passing in the mission and valid SCLK string, get the ephemeris\
@@ -42,7 +42,7 @@ paths:
         "400":
           description: "bad input parameter"
       x-swagger-router-controller: "swagger_server.controllers.default_controller"
-  /utcToEt:
+  /utctoet:
     get:
       summary: "Returns list of missions that are currently supported"
       description: "By passing in UTC string, get the ephemeris time\n"
