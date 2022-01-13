@@ -43,6 +43,7 @@ def utctoet(utc):  # noqa: E501
     :rtype: float
     """
     app.app.logger.info(f"utctoet({utc})")
+    
     try: 
         et = pql.utcToEt(utc)
         app.app.logger.info(f"Ephemeris Time Returned: {et}")
