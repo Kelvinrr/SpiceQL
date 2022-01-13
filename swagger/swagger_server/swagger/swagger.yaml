@@ -46,7 +46,7 @@ paths:
     get:
       summary: "Returns list of missions that are currently supported"
       description: "By passing in UTC string, get the ephemeris time\n"
-      operationId: "avail_missions"
+      operationId: "utctoet"
       produces:
       - "application/json"
       parameters:
