@@ -2,3 +2,4 @@ breathe
 sphinxcontrib.gist
 m2r2
 sphinx_material
+werkzeug==0.16.1

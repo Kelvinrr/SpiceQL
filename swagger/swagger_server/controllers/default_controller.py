@@ -1,8 +1,13 @@
 import connexion
 import six
+import logging 
 
 from swagger_server import util
 
+from flask import request
+app = connexion.App("SpiceQL", specification_dir="./swagger/")
+
+import pyspiceql as pql
 
 def sclck_to_et(mission, sclk):  # noqa: E501
     """Coverts an SCLK string to an ephemeris time
@@ -16,4 +21,11 @@ def sclck_to_et(mission, sclk):  # noqa: E501
 
     :rtype: float
     """
-    return 'do some magic!'
+    app.app.logger.info(f"sclktoet({mission}, {sclk})")
+    try: 
+        et = pql.sclkToEt(mission, sclk)
+        app.app.logger.info("Ephemeris Time Returned: ", et)
+        return et
+    except Exception as e: 
+        return str(e), 400
+

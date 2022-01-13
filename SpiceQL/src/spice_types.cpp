@@ -157,7 +157,11 @@ namespace SpiceQL {
       KernelSet sclkSet(sclks);
 
       SpiceDouble et;
+
+      checkNaifError();
       scs2e_c(Kernel::translateFrame(mission), sclk.c_str(), &et);
+      checkNaifError();
+
       return et;
   }
 

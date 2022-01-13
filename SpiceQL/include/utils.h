@@ -332,4 +332,12 @@ namespace SpiceQL {
     * @returns string vector containing arr data
    **/
    std::string getDataDirectory();
+
+
+  /**
+   * @brief raises a C++ exception if NAIF has an error buffered. 
+   * 
+   * @param reset true if NAIF status errors should be reset 
+   */
+  bool checkNaifError(bool reset=true);
 }
