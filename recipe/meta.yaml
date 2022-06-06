@@ -3,7 +3,9 @@ package:
   version: 0.0.1 # {{ environ.get("GIT_DESCRIBE_TAG", "") }}
 
 source:
-  git_url: https://github.com/USGS-Astrogeology/SpiceQL.git
+  git_url: https://github.com/kelvinrr/SpiceQL.git
+  git_tag: swaggerhub
+
 build:
   string: {{ environ.get("GIT_DESCRIBE_HASH", "dev") }}
 
@@ -16,7 +18,7 @@ requirements:
     - fmt <8
     - cpp-filesystem
   run:
-    - python>=3
+    - python=3.9
     - cspice-cmake
   host:
     - python >=3

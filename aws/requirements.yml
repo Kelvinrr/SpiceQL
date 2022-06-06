@@ -1,0 +1,24 @@
+channels:
+  - defaults
+  - conda-forge
+  - usgs-astrogeology
+  - usgs-astrogeology/label/dev
+  - tudat-team
+
+dependencies:
+  - python=3.9
+  - cmake
+  - cspice-cmake
+  - cpp-filesystem
+  - doxygen
+  - fmt
+  - make
+  - pip
+  - pytest
+  - swig
+  - jsonschema
+  - pip:
+    - breathe
+    - sphinx-material
+    - m2r2
+    - sphinxcontrib.gist

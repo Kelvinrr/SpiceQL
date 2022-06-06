@@ -1,12 +1,18 @@
 import json
-import pyspiceql
 
 def lambda_handler(event, context):
+    import sys
+
+    print(sys.executable)
     
     # TODO implement
     print(f"event: ", event)
     print(f"context: ", context)
+    
+    
+    import pyspiceql
     print(dir(pyspiceql))
+    
     
     try: 
         func = getattr(pyspiceql, event["func"])

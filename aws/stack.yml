@@ -64,7 +64,7 @@ Resources:
       FunctionName: spiceqlambda
       Code:
         S3Bucket: spiceql-resources
-        S3Key: "lambdav3.zip"
+        S3Key: "lambdav4.zip"
   SpiceQLambdaRole: 
     Type: AWS::IAM::Role
     Properties: 

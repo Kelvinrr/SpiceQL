@@ -115,7 +115,6 @@ if(SPICEQL_BUILD_LIB)
   # Install the shipped kernels
   install(FILES ${SPICEQL_KERNELS} DESTINATION "etc/SpiceQL/db/kernels")
 
-
   # Install the library
   install(TARGETS SpiceQL nlohmann_json
           EXPORT spiceQLTargets
