@@ -22,22 +22,30 @@ Resources:
   SpiceQlGet:
     Type: AWS::ApiGateway::Method
     Properties:
-      HttpMethod: GET 
+      HttpMethod: POST
       RestApiId: !Ref SpiceQlRestfulApi
       AuthorizationType: None
+      RequestParameters:
+        method.request.path.action: true
       ResourceId: !GetAtt
         - SpiceQlRestfulApi
         - RootResourceId
       Integration: 
         Type: AWS
+        TimeoutInMillis: 29000
         IntegrationHttpMethod: POST
         PassthroughBehavior: WHEN_NO_MATCH
-        RequestTemplates: 
-          "application/json": "{\n \"statusCode\": 200\n}"
+        RequestParameters:
+          integration.request.path.action: method.request.path.action
+        RequestTemplates:
+          # pass everything through 
+          "application/json": "$input.json('$')"
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SpiceQLambda.Arn}/invocations" 
+        CacheKeyParameters:
+        - method.request.path.action
         IntegrationResponses: 
           - ResponseTemplates:
-              # see https://docs.aws.amazon.com/apigateway/latest/developerguide/api-gateway-mapping-template-reference.html 
+              # see https://docs.aws.amazon.com/apigateway/latest/eloperguide/api-gateway-mapping-template-reference.html 
               # for the format and pre-populated variables
               "application/json": "'$input.body'"
             StatusCode: 200
@@ -55,91 +63,43 @@ Resources:
     Properties: 
       RestApiId: !Ref SpiceQlRestfulApi
       StageName: v1
+  SpiceQlSG:
+    Type: AWS::EC2::SecurityGroup
+    Properties: 
+      GroupDescription: "Sg for SpiceQLambda"
+      GroupName: SpiceQlSecurityGroupDev
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 442
+          ToPort: 2050
+          CidrIp: 0.0.0.0/0 
+      SecurityGroupIngress: 
+        - IpProtocol: tcp 
+          FromPort: 442
+          ToPort: 2050
+          CidrIp: 0.0.0.0/0 
+      VpcId: vpc-0055752230db6161d
   SpiceQLambda:
     Type: 'AWS::Lambda::Function'
-    Properties: 
+    Properties:
+      Timeout: 100 
       Role: arn:aws:iam::235348801643:role/csr-Lambda-Role
-      Runtime: python3.9
-      Handler: lambda_function.lambda_handler
-      FunctionName: spiceqlambda
+      FunctionName: spiceqlambdadev
+      PackageType: Image
+      FileSystemConfigs: 
+        - Arn: arn:aws:elasticfilesystem:us-west-2:235348801643:access-point/fsap-0fb7e57f6e59213df
+          LocalMountPath: '/mnt/isis_data'
       Code:
-        S3Bucket: spiceql-resources
-        S3Key: "lambdav4.zip"
-  SpiceQLambdaRole: 
-    Type: AWS::IAM::Role
-    Properties: 
-      RoleName: spiceqlambda-s3
-      PermissionsBoundary: arn:aws:iam::235348801643:policy/csr-Developer-Permissions-Boundary
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: General-S3-Actions
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-            - Sid: S3Allow
-              Effect: Allow
-              Action:
-              - s3:*Tagging
-              - s3:AbortMultipartUpload
-              - s3:CreateBucket
-              - s3:DeleteBucket
-              - s3:DeleteObject*
-              - s3:Get*
-              - s3:List*
-              - s3:PutAccelerateConfiguration
-              - s3:PutAnalyticsConfiguration
-              - s3:PutBucketCORS
-              - s3:PutBucketLogging
-              - s3:PutBucketNotification
-              - s3:PutBucketRequestPayment
-              - s3:PutBucketVersioning
-              - s3:PutInventoryConfiguration
-              - s3:PutLifecycleConfiguration
-              - s3:PutMetricsConfiguration
-              - s3:PutObject
-              - s3:PutReplicationConfiguration
-              - s3:Replicate*
-              - s3:RestoreObject
-              Resource:
-              - "arn:aws:s3:::spiceql_resources/*"
-              - "arn:aws:s3:::spiceql_resources"
-  SpiceQLambdaRole: 
-    Type: AWS::IAM::Role
-    Properties: 
-      RoleName: spiceqlambda-cf
-      PermissionsBoundary: arn:aws:iam::235348801643:policy/csr-Developer-Permissions-Boundary
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: ecs-tasks.amazonaws.com
-            Action: sts:AssumeRole
-      Policies:
-        - PolicyName: General-S3-Actions
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-            - Sid: S3Allow
-              Effect: Allow
-              Action:
-              - cloudformation:CreateChangeSet
-              - cloudformation:CreateStack
-              - cloudformation:DeleteChangeSet
-              - cloudformation:DescribeChangeSet
-              - cloudformation:DescribeStacks
-              - cloudformation:DescribeStackResources
-              - cloudformation:ExecuteChangeSet
-              - cloudformation:GetTemplate
-              - cloudformation:UpdateStack              
-              Resource:
-              - !Ref AWS::StackId
+        ImageUri: 235348801643.dkr.ecr.us-west-2.amazonaws.com/spiceql:dev
+      VpcConfig:
+        SecurityGroupIds: 
+          - !Ref SpiceQlSG 
+        SubnetIds: 
+          - subnet-0dd447dd1e3e8f355 
   SpiceQlApiPermission:
     Type: AWS::Lambda::Permission
+    DependsOn:
+      - SpiceQLambda
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref SpiceQLambda
@@ -156,4 +116,7 @@ Resources:
               - !Ref AWS::AccountId
               - ":"
               - !Ref SpiceQlRestfulApi
-              - "/*/GET/*"
+              - "/*/POST/*"
+
+
+

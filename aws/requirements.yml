@@ -7,6 +7,7 @@ channels:
 
 dependencies:
   - python=3.9
+  - s3fs-fuse
   - cmake
   - cspice-cmake
   - cpp-filesystem
@@ -17,8 +18,3 @@ dependencies:
   - pytest
   - swig
   - jsonschema
-  - pip:
-    - breathe
-    - sphinx-material
-    - m2r2
-    - sphinxcontrib.gist

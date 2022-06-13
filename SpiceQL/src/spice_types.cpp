@@ -149,9 +149,12 @@ namespace SpiceQL {
       Config missionConf;
       missionConf = missionConf[mission];
 
+      std::cout << "getting Kernels" << std::endl;
       json sclks = missionConf.getLatestRecursive("sclk");
-      KernelSet sclkSet(sclks);
+      std::cout << "sclks: " << sclks << std::endl;
 
+      KernelSet sclkSet(sclks);
+      std::cout << "loaded Kernels" << std::endl;
       SpiceDouble et;
 
       checkNaifError();

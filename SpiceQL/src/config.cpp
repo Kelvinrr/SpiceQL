@@ -57,6 +57,7 @@ namespace SpiceQL {
     vector<json::json_pointer> json_to_eval = SpiceQL::findKeyInJson(eval_json, "kernels", true);
 
     for (auto pointer:json_to_eval) {
+      std::cout << "pointer to eval:" << pointer << std::endl;
       vector<string> res = getPathsFromRegex(getDataDirectory(), eval_json[pointer]);
       eval_json[pointer] = res;
     }
@@ -90,10 +91,14 @@ namespace SpiceQL {
     json eval_json;
     
     for (auto &pointer : pointers) {
+      std::cout << pointer << std::endl;
       json::json_pointer p(pointer);
       json::json_pointer cpointer(confPointer);
+      
       eval_json[p] = config[cpointer / p];
     }
+
+    std::cout << eval_json << std::endl;
 
     json res = evaluateJson(eval_json);
     return getLatestKernels(res);

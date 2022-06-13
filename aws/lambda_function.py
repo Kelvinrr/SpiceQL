@@ -18,7 +18,7 @@ def lambda_handler(event, context):
         func = getattr(pyspiceql, event["func"])
         event.pop('func')
         ret = func(**event)
-        
+        print(ret) 
         return {
             "statusCode" : 200,
             "body" : json.dumps({
