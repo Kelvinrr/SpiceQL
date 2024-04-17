@@ -61,11 +61,14 @@ if(SPICEQL_BUILD_LIB)
   find_package(cereal REQUIRED)
   find_package(spdlog REQUIRED)
   find_package(hiredis REQUIRED)
+  # find_package(parquet REQUIRED)
+  find_package(Arrow REQUIRED)
 
   set(SPICEQL_INSTALL_INCLUDE_DIR "include/SpiceQL")
   set(SPICEQL_SRC_FILES   ${CMAKE_CURRENT_SOURCE_DIR}/SpiceQL/src/spiceql.cpp 
                           ${CMAKE_CURRENT_SOURCE_DIR}/SpiceQL/src/utils.cpp
                           ${CMAKE_CURRENT_SOURCE_DIR}/SpiceQL/src/io.cpp
+                          ${CMAKE_CURRENT_SOURCE_DIR}/SpiceQL/src/inventory.cpp 
                           ${CMAKE_CURRENT_SOURCE_DIR}/SpiceQL/src/query.cpp
                           ${CMAKE_CURRENT_SOURCE_DIR}/SpiceQL/src/spice_types.cpp
                           ${CMAKE_CURRENT_SOURCE_DIR}/SpiceQL/src/memoized_functions.cpp
@@ -75,6 +78,7 @@ if(SPICEQL_BUILD_LIB)
                            ${SPICEQL_BUILD_INCLUDE_DIR}/utils.h
                            ${SPICEQL_BUILD_INCLUDE_DIR}/memoized_functions.h
                            ${SPICEQL_BUILD_INCLUDE_DIR}/io.h
+                           ${SPICEQL_BUILD_INCLUDE_DIR}/inventory.h 
                            ${SPICEQL_BUILD_INCLUDE_DIR}/spice_types.h
                            ${SPICEQL_BUILD_INCLUDE_DIR}/query.h
                            ${SPICEQL_BUILD_INCLUDE_DIR}/config.h)

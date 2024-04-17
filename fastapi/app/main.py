@@ -81,7 +81,9 @@ async def strSclkToEt(
     frameCode: int,
     sclk: str,
     mission: str,
-    searchKernels: bool = False):
+    searchKernels: bool = True):
+    print(f"SpiceData: {pyspiceql.getDataDirectory()}")
+
     try:
         result = pyspiceql.strSclkToEt(frameCode, sclk, mission, searchKernels)
         body = ResultModel(result=result)

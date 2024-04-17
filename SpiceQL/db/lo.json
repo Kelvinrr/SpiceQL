@@ -22,6 +22,8 @@
         "sclk": {
             "kernels": ["lo[0-9]{0,1}_fict.tsc$"]
         },
-        "deps" : ["/base/pck"]
+        "pck" : {
+            "deps" : ["/base/pck"]
+        } 
     }
 }

@@ -9,7 +9,8 @@
         "pck": {
             "reconstructed" : {
                 "kernels": ["itokawa_gaskell_n[0-9]{1}.tpc"]
-            }
+            },
+            "deps" : ["/base/pck"]
         },
         "ck": {
             "reconstructed": {
@@ -24,8 +25,7 @@
         },
         "dsk" : {
             "kernels" : ["hay_a_amica_5_itokawashape_v1_0_512q.bds", "hhay_a_amica_5_itokawashape_v1_0_64q.bds"]
-        },
-        "deps" : ["/base/pck"]
+        } 
     },
     "amica": {
         "spk" : {

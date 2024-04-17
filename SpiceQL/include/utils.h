@@ -16,6 +16,8 @@
 #include <nlohmann/json.hpp>
 
 #include "spice_types.h"
+#include "inventory.h"
+#include "config.h"
 
 /**
  * @namespace SpiceQL
@@ -128,6 +130,9 @@ namespace SpiceQL {
     * @returns std::vector of start and stop times
    **/
   std::vector<std::pair<double, double>> getTimeIntervals(std::string kpath);
+
+
+  std::pair<double, double> getStartStopTimes(std::string kpath);
 
 
   /**
@@ -512,4 +517,9 @@ namespace SpiceQL {
    * @param mission mission name of the config file
    */
   nlohmann::json loadSelectKernels(std::string kernelType, std::string mission);
+
+
+  // // Inventory get_json_inventory();
+
+  // KernelSet loadTimeKernels();
 }

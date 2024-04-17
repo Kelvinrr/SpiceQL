@@ -284,6 +284,8 @@ namespace SpiceQL {
      * @param kernels 
      */
     KernelSet(nlohmann::json kernels);
+    KernelSet() = default;
+
     ~KernelSet() = default;
 
     //! map of path to kernel pointers

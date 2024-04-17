@@ -109,7 +109,6 @@ namespace SpiceQL {
 
 
   vector<vector<string>> getPathsFromRegex(string root, vector<string> regexes) {
-    cout << "root: " << root << endl;
     vector<string> files_to_search = Memo::ls(root, true);
       
     vector<vector<string>> kernels; 
@@ -133,7 +132,6 @@ namespace SpiceQL {
         kernels.push_back(paths);
       }
     }
-
     return kernels;
   }
 
@@ -990,16 +988,30 @@ namespace SpiceQL {
   }
 
 
+  pair<double, double> getStartStopTimes(string kpath) {
+    vector<pair<double, double>> times =  getTimeIntervals(kpath);
+    pair<double, double> startStop(times[0].first, times[0].second);
+
+    for (auto &p: times) { 
+      startStop.first = min(startStop.first, p.first);
+      startStop.second = max(startStop.second, p.second);
+    }
+
+    return startStop; 
+  }
+
+
   string globTimeIntervals(string mission) { 
     SPDLOG_TRACE("In globTimeIntervals.");
     Config conf;
-    conf = conf[mission];
     json new_json = {};
-    json sclk_json = getLatestKernels(conf.get("sclk"));
+    json sclk_json = getLatestKernels(conf[mission].get("sclk"));
+    json lsk_json = getLatestKernels(conf["base"].get("lsk")); 
     KernelSet sclks(sclk_json);
+    KernelSet lsks(lsk_json);
 
     // Get CK Times
-    json ckJson = conf.getRecursive("ck");
+    json ckJson = conf[mission].getRecursive("ck");
 
     vector<json::json_pointer> ckKernelGrps = findKeyInJson(ckJson, "kernels");
     for(auto &ckKernelGrp : ckKernelGrps) { 
@@ -1026,7 +1038,6 @@ namespace SpiceQL {
     }
     return new_json.dump();
   }
-
 
 
   string getDataDirectory() {
@@ -1069,6 +1080,7 @@ namespace SpiceQL {
     }
 
     return dbPath; 
+
   }  
 
 
@@ -1132,7 +1144,8 @@ namespace SpiceQL {
   void resolveConfigDependencies(json &config, const json &dependencies) {
     SPDLOG_TRACE("IN resolveConfigDependencies");
     vector<json::json_pointer> depLists = findKeyInJson(config, "deps");
-    
+    cout << "deplist size: " <<  depLists.size() << endl;
+
     // 10 seems like a reasonable number of recursive dependencies to allow
     int maxRecurssion = 10;
     int numRecurssions = 0;
@@ -1197,7 +1210,6 @@ namespace SpiceQL {
     json::json_pointer depPointer(pointer);
     depPointer /= "deps";
     json deps = config[depPointer];
-    
     for (auto path: deps) {
       fs::path fsDataPath(getDataDirectory() + (string)path);
       if (fs::exists(fsDataPath)) {
@@ -1320,4 +1332,10 @@ namespace SpiceQL {
 
     return kernels;
   }
+
+  // Inventory get_json_inventory() {
+  //   Inventory inventory; 
+  //   return inventory;
+  // }
+
 }

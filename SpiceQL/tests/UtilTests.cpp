@@ -464,3 +464,8 @@ TEST_F(LroKernelSet, UnitTestGetTargetOrientation) {
   EXPECT_NEAR(resStates[5], 0.0, 1e-14);
   EXPECT_NEAR(resStates[6], 0.0, 1e-14);
 }
+
+
+// TEST_F(LroKernelSet, UnitTestGetBuildInventory) {
+//   get_json_inventory();
+// }
