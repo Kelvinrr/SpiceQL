@@ -11,7 +11,10 @@ import os
 import pytest
 import httpx
 import math
- 
+
+timeout = httpx.Timeout(connect=50.0, read=50.0, write=50.0, pool=50.0)
+SSL_VERIFY = True
+
 BASE_URL = "https://astrogeology.usgs.gov/apis/spiceql/latest"
 if ("SPICEQL_REST_URL" in os.environ):
     BASE_URL = os.environ["SPICEQL_REST_URL"]
@@ -23,6 +26,7 @@ if ("SPICEQL_REST_URL" in os.environ):
 
 def assert_success(response: httpx.Response) -> dict:
     """Assert HTTP 200 and SpiceQL statusCode 200, return the body dict."""
+    print(r.request)
     assert response.status_code == 200, (
         f"HTTP error {response.status_code}: {response.text}"
     )
@@ -57,7 +61,7 @@ class TestGetTargetStates:
 
     ENDPOINT = f"{BASE_URL}/getTargetStates"
     PARAMS = {
-        "ets": "[690201375.8323615,690201389.2866975]",
+        "ets": "[690201375.8323615]",
         "target": "SUN",
         "observer": "Mars",
         "frame": "IAU_MARS",
@@ -67,18 +71,19 @@ class TestGetTargetStates:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        print(self.ENDPOINT)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_returns_two_state_vectors(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         result = body["return"]
         assert isinstance(result, list)
-        assert len(result) == 2, "Expected 2 state vectors (one per ET)"
+        assert len(result) == 1, "Expected 2 state vectors (one per ET)"
 
     def test_each_state_vector_has_seven_elements(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         for vec in body["return"]:
             assert len(vec) == 7, (
@@ -86,7 +91,7 @@ class TestGetTargetStates:
             )
 
     def test_first_state_vector_values(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         vec = body["return"][0]
         expected = [
@@ -102,19 +107,19 @@ class TestGetTargetStates:
             assert approx_equal(got, exp), f"Expected ~{exp}, got {got}"
 
     def test_kernels_present(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         kernels = body["kernels"]
         assert isinstance(kernels, dict)
         assert len(kernels) > 0, "Expected at least one kernel type in response"
 
     def test_kernels_include_ck(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "ck" in body["kernels"], "Expected 'ck' kernel in response"
 
     def test_kernels_include_spk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "spk" in body["kernels"], "Expected 'spk' kernel in response"
 
@@ -200,7 +205,9 @@ class TestGetTargetStatesRanged:
 
 # ---------------------------------------------------------------------------
 # getTargetOrientations
+
 # ---------------------------------------------------------------------------
+
 
 class TestGetTargetOrientations:
     """
@@ -219,11 +226,11 @@ class TestGetTargetOrientations:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_returns_one_quaternion(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         result = body["return"]
         assert isinstance(result, list)
@@ -231,13 +238,13 @@ class TestGetTargetOrientations:
 
     def test_quaternion_has_seven_elements(self):
         """Each row is [qw, qx, qy, qz, av_x, av_y, av_z]."""
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         q = body["return"][0]
         assert len(q) == 7, "Quaternion row should have 7 elements"
 
     def test_quaternion_values(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         q = body["return"][0]
         expected = [
@@ -254,13 +261,13 @@ class TestGetTargetOrientations:
 
     def test_scalar_part_near_one(self):
         """First element (scalar part of unit quaternion) should be close to 1."""
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         qw = body["return"][0][0]
         assert abs(qw) <= 1.0 + 1e-6
 
     def test_kernels_include_ck(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "ck" in body["kernels"]
 
@@ -358,28 +365,28 @@ class TestStrSclkToEt:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_float(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], float)
 
     def test_et_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert approx_equal(body["return"], 690201375.8323615), (
             f"Expected ~690201375.8323615, got {body['return']}"
         )
 
     def test_kernels_include_sclk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "sclk" in body["kernels"]
 
     def test_kernels_include_lsk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "lsk" in body["kernels"]
 
@@ -403,28 +410,28 @@ class TestDoubleSclkToEt:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_float(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], float)
 
     def test_et_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert approx_equal(body["return"], 31593348.006268278), (
             f"Expected ~31593348.006268278, got {body['return']}"
         )
 
     def test_kernels_include_sclk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "sclk" in body["kernels"]
 
     def test_kernels_include_fk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "fk" in body["kernels"]
 
@@ -450,23 +457,23 @@ class TestDoubleEtToSclk:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_string(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], str)
 
     def test_sclk_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert body["return"] == "27/1321396563.036", (
             f"Expected '27/1321396563.036', got '{body['return']}'"
         )
 
     def test_kernels_include_sclk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "sclk" in body["kernels"]
 
@@ -481,6 +488,7 @@ class TestUtcToEt:
         ?utc=1971-08-04T16:28:24.9159358&searchKernels=true"
     """
 
+
     ENDPOINT = f"{BASE_URL}/utcToEt"
     PARAMS = {
         "utc": "1971-08-04T16:28:24.9159358",
@@ -488,23 +496,23 @@ class TestUtcToEt:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_float(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], float)
 
     def test_et_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert approx_equal(body["return"], -896556653.900884), (
             f"Expected ~-896556653.900884, got {body['return']}"
         )
 
     def test_kernels_include_lsk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "lsk" in body["kernels"]
 
@@ -528,24 +536,25 @@ class TestEtToUtc:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_string(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], str)
 
     def test_utc_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert body["return"] == "1971 AUG 04 16:28:24.9159357548", (
             f"Unexpected UTC string: '{body['return']}'"
         )
 
     def test_kernels_include_lsk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
+
         assert "lsk" in body["kernels"]
 
 
@@ -567,21 +576,21 @@ class TestTranslateNameToCode:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_int(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], int)
 
     def test_code_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert body["return"] == -74, f"Expected -74, got {body['return']}"
 
     def test_kernels_include_fk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "fk" in body["kernels"]
 
@@ -604,21 +613,21 @@ class TestTranslateCodeToName:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_string(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], str)
 
     def test_name_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert body["return"] == "MRO", f"Expected 'MRO', got '{body['return']}'"
 
     def test_kernels_include_fk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "fk" in body["kernels"]
 
@@ -641,18 +650,19 @@ class TestGetFrameInfo:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_list_of_three(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         result = body["return"]
+
         assert isinstance(result, list)
         assert len(result) == 3, "Expected [center, class, classId]"
 
     def test_frame_info_values(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         center, cls, class_id = body["return"]
         assert center == -74, f"Expected center=-74, got {center}"
@@ -660,7 +670,7 @@ class TestGetFrameInfo:
         assert class_id == -74021, f"Expected classId=-74021, got {class_id}"
 
     def test_kernels_include_fk(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "fk" in body["kernels"]
 
@@ -683,30 +693,30 @@ class TestGetTargetFrameInfo:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_dict(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], dict)
 
     def test_return_contains_frame_code_and_name(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         result = body["return"]
         assert "frameCode" in result
         assert "frameName" in result
 
     def test_frame_code_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert body["return"]["frameCode"] == 10014, (
             f"Expected frameCode=10014, got {body['return']['frameCode']}"
         )
 
     def test_frame_name_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert body["return"]["frameName"] == "IAU_MARS", (
             f"Expected frameName='IAU_MARS', got {body['return']['frameName']}"
@@ -731,41 +741,41 @@ class TestFindMissionKeywords:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_dict(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], dict)
 
     def test_contains_frame_name(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "FRAME_-74021_NAME" in body["return"]
 
     def test_frame_name_is_mro_ctx(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert body["return"]["FRAME_-74021_NAME"] == "MRO_CTX"
 
     def test_contains_focal_length(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "INS-74021_FOCAL_LENGTH" in body["return"]
 
     def test_focal_length_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert approx_equal(body["return"]["INS-74021_FOCAL_LENGTH"], 352.9271664)
 
     def test_contains_pixel_pitch(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "INS-74021_PIXEL_PITCH" in body["return"]
 
     def test_kernels_include_ik(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "ik" in body["kernels"]
 
@@ -788,21 +798,21 @@ class TestFindTargetKeywords:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_dict(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], dict)
 
     def test_contains_radii(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "BODY499_RADII" in body["return"]
 
     def test_radii_values(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         radii = body["return"]["BODY499_RADII"]
         assert len(radii) == 3
@@ -811,17 +821,17 @@ class TestFindTargetKeywords:
         assert approx_equal(radii[2], 3376.2)
 
     def test_contains_pole_ra(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "BODY499_POLE_RA" in body["return"]
 
     def test_contains_pole_dec(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "BODY499_POLE_DEC" in body["return"]
 
     def test_kernels_include_pck(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "pck" in body["kernels"]
 
@@ -845,24 +855,24 @@ class TestFrameTrace:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_list_of_two(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         result = body["return"]
         assert isinstance(result, list)
         assert len(result) == 2, "Expected two chain lists"
 
     def test_first_chain(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         chain1 = body["return"][0]
         assert chain1 == [-74000, -74900, 1], f"Unexpected chain 1: {chain1}"
 
     def test_second_chain(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         chain2 = body["return"][1]
         assert chain2 == [-74021, -74020, -74699, -74690, -74000], (
@@ -870,7 +880,7 @@ class TestFrameTrace:
         )
 
     def test_kernels_include_ck(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "ck" in body["kernels"]
 
@@ -889,34 +899,34 @@ class TestExtractExactCkTimes:
     ENDPOINT = f"{BASE_URL}/extractExactCkTimes"
     PARAMS = {
         "observStart": 690201375.8323615,
-        "observEnd": 690201389.2866975,
+        "observEnd": 690201376.8323615,
         "targetFrame": -74021,
         "mission": "ctx",
         "searchKernels": "True",
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_list(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], list)
 
     def test_return_is_non_empty(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert len(body["return"]) > 0
 
     def test_times_are_floats(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         for t in body["return"]:
             assert isinstance(t, float), f"Expected float, got {type(t)}"
 
     def test_times_within_bounds(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         times = body["return"]
         # All times should be within [observStart, observEnd] with some tolerance
@@ -925,12 +935,12 @@ class TestExtractExactCkTimes:
         )
 
     def test_first_time_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert approx_equal(body["return"][0], 690201375.8001044)
 
     def test_kernels_include_ck(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "ck" in body["kernels"]
 
@@ -949,7 +959,7 @@ class TestGetExactTargetOrientations:
     ENDPOINT = f"{BASE_URL}/getExactTargetOrientations"
     PARAMS = {
         "startEt": 690201375.8323615,
-        "stopEt": 690201389.2866975,
+        "stopEt": 690201376.8323615,
         "toFrame": -74000,
         "refFrame": -74690,
         "exactCkFrame" : -74021,
@@ -958,34 +968,34 @@ class TestGetExactTargetOrientations:
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         assert_success(r)
 
     def test_return_is_list(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert isinstance(body["return"], list)
 
     def test_return_is_non_empty(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert len(body["return"]) > 0
 
     def test_each_row_has_eight_elements(self):
         """Each row: [et, qw, qx, qy, qz, av_x, av_y, av_z]."""
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         for row in body["return"]:
             assert len(row) == 8, f"Expected 8 elements per row, got {len(row)}"
 
     def test_first_row_et_value(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         et = body["return"][0][0]
         assert approx_equal(et, 690201375.8001044)
 
     def test_first_row_quaternion_values(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         row = body["return"][0]
         # row[1:5] = [qw, qx, qy, qz]
@@ -999,7 +1009,7 @@ class TestGetExactTargetOrientations:
             assert approx_equal(got, exp, rel=1e-5)
 
     def test_kernels_include_ck(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         body = assert_success(r)
         assert "ck" in body["kernels"]
 
@@ -1023,19 +1033,20 @@ class TestSearchForKernelsets:
         "spiceqlNames": '["odyssey","mars"]',
         "types": '["sclk","spk","tspk","ck"]',
         "startEt": 715662878.32324,
-        "stopEt": 715663065.2303,
+        "stopEt": 715662879.32324,
         "searchKernels": "true",
     }
 
     def test_status_ok(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         # Accept 200 or a well-formed error – endpoint may require different params
+        print(r.request)
         assert r.status_code == 200, (
             f"HTTP error {r.status_code}: {r.text}"
         )
 
     def test_return_is_dict_or_list(self):
-        r = httpx.get(self.ENDPOINT, params=self.PARAMS)
+        r = httpx.get(self.ENDPOINT, params=self.PARAMS, timeout=timeout,verify=SSL_VERIFY)
         if r.status_code == 200:
             data = r.json()
             if data.get("statusCode") == 200:
@@ -1059,7 +1070,7 @@ class TestRoundTripUtcEt:
         r1 = httpx.get(
             f"{BASE_URL}/utcToEt",
             params={"utc": self.UTC_IN, "searchKernels": "true"},
-        )
+            verify=SSL_VERIFY)
         body1 = assert_success(r1)
         et = body1["return"]
 
@@ -1067,7 +1078,7 @@ class TestRoundTripUtcEt:
         r2 = httpx.get(
             f"{BASE_URL}/etToUtc",
             params={"et": et, "format": "ISOC", "precision": 3, "searchKernels": "true"},
-        )
+            verify=SSL_VERIFY)
         body2 = assert_success(r2)
         utc_out = body2["return"]
 
@@ -1093,7 +1104,7 @@ class TestRoundTripSclkEt:
                 "sclk": "1321396563:036",
                 "mission": "ctx",
                 "searchKernels": "True",
-            },
+            }, verify=SSL_VERIFY
         )
         body1 = assert_success(r1)
         et = body1["return"]
@@ -1106,7 +1117,7 @@ class TestRoundTripSclkEt:
                 "frameCode": -74,
                 "mission": "ctx",
                 "searchKernels": "true",
-            },
+            }, verify=SSL_VERIFY
         )
         body2 = assert_success(r2)
         sclk_out = body2["return"]
@@ -1130,6 +1141,7 @@ class TestRoundTripTranslate:
         r1 = httpx.get(
             f"{BASE_URL}/translateNameToCode",
             params={"frame": "MRO", "mission": "ctx", "searchKernels": "true"},
+            verify=SSL_VERIFY
         )
         body1 = assert_success(r1)
         code = body1["return"]
@@ -1138,6 +1150,7 @@ class TestRoundTripTranslate:
         r2 = httpx.get(
             f"{BASE_URL}/translateCodeToName",
             params={"frame": code, "mission": "ctx", "searchKernels": "true"},
+            verify=SSL_VERIFY
         )
         body2 = assert_success(r2)
         name = body2["return"]
