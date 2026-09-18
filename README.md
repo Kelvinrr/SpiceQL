@@ -1,60 +1,81 @@
 # SpiceQL
-[![Documentation Status](https://readthedocs.org/projects/sugar-spice/badge/?version=latest)](http://sugar-spice.readthedocs.io/?badge=latest) [![CMake](https://github.com/DOI-USGS/SpiceQL/actions/workflows/ctests.yml/badge.svg)](https://github.com/DOI-USGS/SpiceQL/actions/workflows/ctests.yml)
+
+[SpiceQL Manual](https://astrogeology.usgs.gov/docs/manuals/spiceql/) ([0.1 Archive](http://sugar-spice.readthedocs.io/?badge=latest))
 
 This Library provides a C++ interface querying, reading and writing Naif SPICE kernels. Built on the [Naif Toolkit](https://naif.jpl.nasa.gov/naif/toolkit.html).
 
+Check out the Astrogeology Software Docs for SpiceQL examples:
+
+- [Cassini Tutorial](https://astrogeology.usgs.gov/docs/getting-started/using-spiceql/spiceql-cassini-tutorial/)
+- [pyspiceql Visualization](https://astrogeology.usgs.gov/docs/getting-started/using-spiceql/visualizing-with-pyspiceql-tutorial/)
+- [REST, Python, C++ API](https://astrogeology.usgs.gov/docs/getting-started/using-spiceql/spiceql-cassini-tutorial/)
+- [WebAssembly Bindings](https://astrogeology.usgs.gov/docs/getting-started/using-spiceql/spiceql-wasm/)
+- [Use with Other Libraries](https://astrogeology.usgs.gov/docs/how-to-guides/SPICE/using-spiceql-with-other-libraries/)
+- [Use in USGS ISIS and ALE](https://astrogeology.usgs.gov/docs/how-to-guides/SPICE/using-web-spice-in-isis-and-ale/)
+
+NAIF Resources - Learn more about the Kernels and SPICE Information that SpiceQL queries:
+
+- [Intro to Kernels (PDF)](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/Tutorials/pdf/individual_docs/12_intro_to_kernels)
+- [SPICE Required Reading](https://naif.jpl.nasa.gov/pub/naif/toolkit_docs/C/req/index.html)
 
 ## Building The Library
 
-The library leverages anaconda to maintain all of it's dependencies. So in order to build SpiceQL, you'll need to have Anaconda installed.
+### Prerequisites
 
-> **NOTE**:If you already have Anaconda installed, skip to step 3.
+#### Conda
 
-1. Download either the Anaconda or Miniconda installation script for your OS platform. Anaconda is a much larger distribtion of packages supporting scientific python, while Miniconda is a minimal installation and not as large: Anaconda installer, Miniconda installer
-1. If you are running on some variant of Linux, open a terminal window in the directory where you downloaded the script, and run the following commands. In this example, we chose to do a full install of Anaconda, and our OS is Linux-based. Your file name may be different depending on your environment.
-   * If you are running Mac OS X, a pkg file (which looks similar to Anaconda3-5.3.0-MacOSX-x86_64.pkg) will be downloaded. Double-click on the file to start the installation process.
-1. Open a Command line prompt and run the following commands:
+SpiceQL uses conda to maintain dependencies.
+If you don't have conda yet, we recommend installing it 
+via [Miniforge](https://github.com/conda-forge/miniforge):
+
+```sh
+curl -L -O "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-$(uname)-$(uname -m).sh"
+bash Miniforge3-$(uname)-$(uname -m).sh
+```
+
+#### Kernels
+
+If you have ISIS and haven't downloaded kernels, use the [`downloadIsisData` command](https://astrogeology.usgs.gov/docs/how-to-guides/environment-setup-and-maintenance/isis-data-area/).
+
+If you don't have ISIS, you can still use the script by downloading 
+[the downloadIsisData script](https://raw.githubusercontent.com/USGS-Astrogeology/ISIS3/dev/isis/scripts/downloadIsisData) 
+and the [rclone.conf](https://raw.githubusercontent.com/USGS-Astrogeology/ISIS3/dev/isis/config/rclone.conf).
+You will need to have [rclone](https://rclone.org/install/) and python installed to run the script.
+
+### Cloning and Building
 
 ```bash
-# Clone the Github repo, note the recursive flag, this library depends on
-# submodules that also need to be cloned. --recurse-submodules enables this and
-# the -j8 flag parallelizes the cloning process.
+# Clone the repo, including submodules. -j8 parellelizes for a faster clone.
 git clone --recurse-submodules -j8 https://github.com/DOI-USGS/SpiceQL.git
+# To clone submodules later: git submodule update --init --recursive
 
-# cd into repo dir
+# Open the newly cloned repo
 cd SpiceQL
 
-# Create new environment from the provided dependency file, the -n flag is
-# proceded by the name of the new environment, change this to whatever works for you
+# Create conda env from environment.yml 
+# -n <env-name>, any name is fine.
 conda env create -f environment.yml -n ssdev
 
 # activate the new env
 conda activate ssdev
 
-# make and cd into the build directory. This can be placed anywhere, but here, we make
-# it in the repo (build is in .gitingore, so no issues there)
+# make and cd into the build directory.
 mkdir build
 cd build
 
 # Configure the project, install directory can be anything, here, it's the conda env
 cmake .. -DCMAKE_INSTALL_PREFIX=$CONDA_PREFIX
 
-# Optional: DB files are installed by default in $CONDA_PREFIX/etc/SpiceQL/db to 
-# use files that are included within the repo, you must create and define 
-# an environment variable named SPICEQL_DEV_DB. 
-# note SPICEQL_DEV_DB must be set to 'True'
+# Optional: DB files are installed by default in $CONDA_PREFIX/etc/SpiceQL/db.
+# To use files included in the repo, set env var SPICEQL_DEV_DB=True.
 export SPICEQL_DEV_DB=True
 
-# Set the environment variable(s) to point to your kernel install 
-# The following environment variables are used by default in order of priority: 
-# $SPICEROOT, $ALESPICEROOT, $ISISDATA. 
-# SPICEROOT is unique to this lib, while ALESPICEROOT, and ISISDATA are used 
-# by both ALE and ISIS respectively. 
-# note you can set each of these environment variables path to point to the
-# correspoding kernels downloaded location, ie 
-SPICEROOT=~/spiceQL/Kernals/spiceRootKernel
-ALESPICEROOT=~/spiceQL/Kernals/aleSpiceRootKernel
-ISISDATA=~/spiceQL/Kernals/isisData
+# Set the environment variable(s) to point to your kernel data.
+# The following env vars are used by default in order of priority: 
+# (1) $SPICEROOT, (2) $ALESPICEROOT, (3) $ISISDATA.
+SPICEROOT=/data/kernels/
+# ALESPICEROOT=/data/kernels/
+# ISISDATA=/data/kernels/
 
 # build and install project
 make install
@@ -75,9 +96,34 @@ The SpiceQL API is available via Python bindings in the module `pyspiceql`. The 
 
 ## WebAssembly / JavaScript
 
-SpiceQL can be compiled to WebAssembly with [Emscripten](https://emscripten.org/), exposing the `api.h` surface to JavaScript so it runs in the browser or Node. This is a separate build from the native library and its Python bindings.
+See Also: [SpiceQL WebAssembly Bindings](https://astrogeology.usgs.gov/docs/getting-started/using-spiceql/spiceql-wasm/)
 
-> **NOTE**: There is no CDN/npm package yet. You must either build the module locally or download the prebuilt artifact from the [GitHub Releases](https://github.com/DOI-USGS/SpiceQL/releases) page.
+### Setup/Installation Options
+
+#### [GitHub Releases (Manual Download) ↗](https://github.com/DOI-USGS/SpiceQL/releases)
+
+#### NPM Installation
+
+```sh
+# In your terminal in your project directory:
+npm install @usgs-astrogeology/spiceql
+```
+
+```js
+// In your javascript:
+import { loadSpiceQL } from '@usgs-astrogeology/spiceql'
+```
+
+*A Module Bundler, like Vite, is required for this kind of import.*
+
+
+#### Import from CDN (jsDelivr)
+
+```js
+// In your javascript:
+import { loadSpiceQL } from 'https://cdn.jsdelivr.net/npm/@usgs-astrogeology/spiceql/dist/spiceql.js';
+```
+
 
 ### Building locally
 
@@ -100,8 +146,9 @@ emcmake cmake -S . -B build-wasm \
 
 cmake --build build-wasm -j"$(getconf _NPROCESSORS_ONLN)"
 ```
+*If you get a permission denied error, use a lower number of cores in the last command: `-j4` or `-j1` instead of `-j"$(getconf _NPROCESSORS_ONLN)"`*
 
-The CMake options are:
+#### CMake Options:
 
 | Option | Value | Why |
 | --- | --- | --- |
@@ -125,51 +172,85 @@ The small hand-written wrappers `bindings/wasm/spiceql.js` (which you import) an
 Copy the three `spiceql_wasm.*` artifacts and both wrappers (`bindings/wasm/spiceql.js` and `bindings/wasm/naifspice.js`) next to each other (they must be co-located — `spiceql.js` imports the other two), then import `spiceql.js` locally:
 
 ```js
-// example.mjs — run with: node example.mjs
+// example.js — run with: node example.js
+
+import { readFileSync } from 'node:fs';
 import { loadSpiceQL } from './spiceql.js';
 
 const spiceql = await loadSpiceQL();
 
-// Kernel search (the HDF5 inventory) is not available in the WASM build. Furnish
-// your own kernels: write their bytes into the virtual filesystem, then pass the
-// paths explicitly with searchKernels:false.
-import { readFileSync } from 'node:fs';
-spiceql.mountKernel('/kernels/naif0012.tls', readFileSync('naif0012.tls'));
+const frameCode = -85;              
+const sclkTime = 922997380.174174;  // We'll use SpiceQL to convert Sclk to ET
 
-const { result, kernels } = spiceql.utcToEt('2000-01-01T00:00:00', {
-  searchKernels: false,
-  kernelList: ['/kernels/naif0012.tls'],
+// Mount Kernels
+const kernelList = [];
+const kernelUrls = [
+    './data/base/kernels/lsk/naif0012.tls',
+    './data/lro/kernels/fk/lro_frames_2014049_v01.tf',
+    './data/lro/kernels/sclk/lro_clkcor_2024262_v00.tsc',
+]
+for (const url of kernelUrls) {
+    const kernelPath = '/kernels/' + url.split('/').pop();    // Get filename, discard path
+    spiceql.mountKernel(kernelPath, readFileSync(url));       // Mount as sanitized path
+    kernelList.push(kernelPath)                               // Add sanitized path to list
+}
+
+// Convert Spacecraft Clock Time (sclk) to Ephemeris Time (et)
+const { result: ephTime } = spiceql.doubleSclkToEt(frameCode, sclkTime, {
+    mission: 'lro',
+    searchKernels: false,
+    kernelList,
 });
-console.log(result);   // ET seconds past J2000
-console.log(kernels);  // { lsk: ['/kernels/naif0012.tls'] }
+console.info("Ephemeris Time", ephTime);
 ```
 
-In a browser it works the same way — `import` `spiceql.js` locally from a
+In a browser it works the same way — `import` `spiceql.js` in a
 `<script type="module">` and use `fetch()` to get kernel bytes for `mountKernel`.
 The five files (`spiceql.js`, `naifspice.js`, `spiceql_wasm.js`,
 `spiceql_wasm.wasm`, `spiceql_wasm.data`) and your kernels just need to be
 served over HTTP from the same folder (any static host works; opening the page from `file://` does not,
-because the browser blocks `fetch()` of local files):
+because the browser blocks `fetch()`):
 
 ```html
 <!doctype html>
-<!-- index.html — served next to spiceql.js and the spiceql_wasm.* files -->
+...
 <script type="module">
-  import { loadSpiceQL } from './spiceql.js';
+    // Import and Load SpiceQL
+    import { loadSpiceQL } from 'https://cdn.jsdelivr.net/npm/@usgs-astrogeology/spiceql/dist/spiceql.js';
 
-  const spiceql = await loadSpiceQL();
+    const spiceqlBasePath = 'https://cdn.jsdelivr.net/npm/@usgs-astrogeology/spiceql/dist/';
+    const spiceql = await loadSpiceQL({
+        moduleOverrides: { locateFile: (path) => spiceqlBasePath + path }
+    });
 
-  // No kernel search in WASM — fetch your own kernel and write it into the
-  // virtual filesystem before calling.
-  const bytes = new Uint8Array(await (await fetch('naif0012.tls')).arrayBuffer());
-  spiceql.mountKernel('/kernels/naif0012.tls', bytes);
+    // Mount Kernels
+    const kernelList = [];
+    const kernelUrls = [
+        'https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/base/kernels/lsk/naif0012.tls',
+        'https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/lro/kernels/fk/lro_frames_2014049_v01.tf',
+        'https://asc-isisdata.s3.us-west-2.amazonaws.com/usgs_data/lro/kernels/sclk/lro_clkcor_2024262_v00.tsc',
+    ]
+    for (const url of kernelUrls) {
+        const kernelData = await fetch(url);                              // Fetch
+        const kernelBuff = new Uint8Array(await kernelData.arrayBuffer()) // Load into Buffer
+        const kernelPath = '/kernels/' + url.split('/').pop();            // Get filename, discard path
+        spiceql.mountKernel(kernelPath, kernelBuff);                      // Mount as sanitized path
+        kernelList.push(kernelPath)                                       // Add sanitized path to list
+    }
 
-  const { result } = spiceql.utcToEt('2000-01-01T00:00:00', {
-    searchKernels: false,
-    kernelList: ['/kernels/naif0012.tls'],
-  });
-  document.body.textContent = `ET = ${result}`;   // ET seconds past J2000
+    // Data to query with
+    const frameCode = -85;
+    const sclkTime = 922997380.174174;
+
+    // Convert Spacecraft Clock Time (sclk) to Ephemeris Time (et)
+    const { result: ephTime } = spiceql.doubleSclkToEt(frameCode, sclkTime, {
+        mission: 'lro',
+        searchKernels: false,
+        kernelList,
+    });
+    console.info("Ephemeris Time", ephTime);
 </script>
+...
 ```
 
 ```bash
