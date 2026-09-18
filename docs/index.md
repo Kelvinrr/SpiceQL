@@ -8,13 +8,23 @@ hide:
 
 
 <style>
-  .md-typeset h1,
+  /* Material injects a level-1 heading from the site name here, because the
+     page opens with the banner instead of one. Matched at the same specificity as
+     the heading-block rule in extra.css, and later in the cascade, so the
+     injected title stays hidden rather than picking up an accent block. */
+  .md-content .md-typeset h1,
   .md-content__button {
     display: none;
   }
 </style>
 
-![banner](assets/banner3.png)
+<div class="sq-hero">
+  <iframe src="assets/mars-banner.html"
+          scrolling="no"
+          loading="lazy"
+          title="Mars Orbit Visualization — SpiceQL">
+  </iframe>
+</div>
 
 
 This Library provides a C++ interface querying, reading and writing Naif SPICE kernels. Built on the [Naif Toolkit](https://naif.jpl.nasa.gov/naif/toolkit.html).

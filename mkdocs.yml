@@ -1,4 +1,8 @@
 site_name: "SpiceQL Manual"
+# Canonical home of the built docs, now that they are published by GitHub Pages
+# rather than synced to S3. Only affects canonical tags and sitemap.xml —
+# in-page links stay relative, so the site still works served from any path.
+site_url: "https://doi-usgs.github.io/SpiceQL/"
 
 theme:
   name: material

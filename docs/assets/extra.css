@@ -17,3 +17,53 @@ body {
     /* or, using CSS variables */
     --md-default-bg-color: white;
   }
+
+/* ==========================================================================
+   Homepage hero
+   Sized to match the StarDS hero (its .ms-hero rules) so the two USGS
+   Astrogeology sites read as a set: the same 14px corner radius and the same
+   box. StarDS gets its height from rem padding, so it grows with Material's
+   root font-size; 26.3rem reproduces that exactly — 526px at the 125% root
+   and 578px at the 137.5% root Material switches to above 100em.
+   The banner itself is an iframe (assets/mars-banner.html), which isolates
+   its Three.js module scripts from MkDocs' own JS.
+   ========================================================================== */
+
+:root {
+  --sq-radius: 14px;
+  --sq-accent: #E84826;   /* the Mars wireframe's red, from the hero banner */
+}
+
+.sq-hero {
+  position: relative;
+  margin: -1.2rem 0 2.5rem;
+  height: 26.3rem;
+  border-radius: var(--sq-radius);
+  overflow: hidden;
+}
+
+.sq-hero iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: none;
+}
+
+/* ==========================================================================
+   Section headings
+   StarDS' filled accent block, in SpiceQL's red: `display: table` is what makes
+   the box shrink-wrap the words instead of spanning the column, and the radius
+   is zeroed against Material's rounded surfaces so the edges stay hard.
+   H3 and below are left plain, as they are there, so the blocks read as section
+   markers rather than decoration on every line. The hero's own title lives
+   inside the banner iframe and is untouched by this.
+   ========================================================================== */
+
+.md-content .md-typeset h1,
+.md-content .md-typeset h2 {
+  display: table;
+  color: #fff;
+  background-color: var(--sq-accent);
+  padding: 0.2em 0.4em;
+  border-radius: 0;
+}

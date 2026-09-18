@@ -1,0 +1,1395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mars — SpiceQL</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+  <link rel="preload" href="ephemeris-cache.msgpack" as="fetch" crossorigin>
+
+  <!--
+    The hero chrome is sized in rem to match StarDS, whose type scales with
+    Material's root font-size (125% → 137.5% above 100em). A media query here
+    would resolve against the IFRAME's width, not the viewport's, so the
+    breakpoint would land at the wrong place; inherit the real value from the
+    embedding page instead. Runs before body paint, so nothing reflows.
+  -->
+  <script>
+    try {
+      const fs = parent.getComputedStyle(parent.document.documentElement).fontSize;
+      if (fs) document.documentElement.style.fontSize = fs;
+    } catch (e) { /* not embedded, or cross-origin: the CSS default stands */ }
+  </script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    /* Material's base root size; overridden above to the host page's actual one */
+    html { font-size: 125%; }
+
+    html, body {
+      width: 100%; height: 100%;
+      overflow: hidden;
+      background: #1e1e1e;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, system-ui, Helvetica, Arial, sans-serif;
+    }
+
+    #banner {
+      position: relative;
+      width: 100%; height: 100%;
+    }
+
+    #mars-canvas {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: block;
+    }
+
+    /* ── Left text overlay ──
+       Padding matches the StarDS hero's (3.5rem top / 3.75rem bottom /
+       1.5rem side), which is what leaves room for the caption strip along
+       the bottom. --title-size is the one knob for the three big words. */
+    #text-overlay {
+      --title-size: 96px;
+      position: absolute;
+      top: 0; left: 0;
+      width: 48%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 3.5rem 1rem 3.75rem 1.5rem;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #text-overlay::before {
+      content: '';
+      position: absolute;
+      top: 8%; left: 0;
+      width: 4px;
+      height: 84%;
+      background: #E84826;
+      border-radius: 0 2px 2px 0;
+    }
+
+    /* Agency eyebrow — the pill StarDS uses, same metrics */
+    #text-overlay .eyebrow {
+      display: inline-block;
+      margin-bottom: 1rem;
+      padding: 0.3rem 0.7rem;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.18);
+      color: #fff;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.14em;
+      line-height: 1.6;
+      text-transform: uppercase;
+      white-space: nowrap;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+    }
+
+    #text-overlay .word {
+      display: block;
+      font-family: 'Bebas Neue', 'Impact', 'Arial Black', sans-serif;
+      font-weight: 400;
+      color: #FFFFFF;
+      line-height: 0.78;
+      letter-spacing: 0.02em;
+      white-space: nowrap;
+      /* Held below --title-size so the eyebrow and buttons fit the same box */
+      font-size: clamp(30px, 8.6vw, var(--title-size));
+      text-shadow:
+        0 2px 24px rgba(0,0,0,0.8),
+        0 0 60px rgba(0,0,0,0.5);
+    }
+
+    /* ── Call-to-action buttons (Material .md-button metrics) ── */
+    #text-overlay .cta { display: flex; flex-wrap: wrap; }
+
+    #text-overlay .btn {
+      pointer-events: auto;                /* the overlay itself is inert */
+      display: inline-block;
+      margin: 1.2rem 0.6rem 0 0;
+      padding: 0.625em 2em;
+      border: 0.1rem solid rgba(255,255,255,0.85);
+      border-radius: 2px;
+      color: #fff;
+      font-size: 1.05rem;
+      font-weight: 700;
+      line-height: 1.6;
+      text-decoration: none;
+      transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+    }
+
+    #text-overlay .btn:hover,
+    #text-overlay .btn:focus-visible {
+      background: rgba(255,255,255,0.16);
+      border-color: #fff;
+    }
+
+    /* StarDS fills its primary with white and inks it in the site's own
+       colour; here that colour is the library's red-orange. */
+    #text-overlay .btn--primary {
+      background: #fff;
+      border-color: #fff;
+      color: #E84826;
+    }
+
+    #text-overlay .btn--primary:hover,
+    #text-overlay .btn--primary:focus-visible {
+      background: #FFF1EE;
+      color: #C93A1D;
+    }
+
+    /* ── Provenance caption (bottom-left, in the padding strip) ── */
+    #caption {
+      position: absolute;
+      left: 1.5rem;                        /* aligns with the title column */
+      bottom: 0.85rem;
+      z-index: 10;
+      display: flex;
+      flex-direction: column;
+      gap: 0.15rem;
+      max-width: 26rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      line-height: 1.4;
+      color: rgba(255,255,255,0.6);
+      pointer-events: none;
+      user-select: none;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.7);
+    }
+
+    /* Only true while the API answered, so it is revealed with the green dot */
+    #caption .live-only { display: none; color: rgba(255,255,255,0.45); }
+    #banner.is-live #caption .live-only { display: block; }
+
+    /* ── Labels that track their body ── */
+    #labels {
+      position: absolute;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      pointer-events: none;
+      overflow: hidden;
+      z-index: 15;
+    }
+
+    .sc-label {
+      position: absolute;
+      top: 0; left: 0;
+      font-family: 'Roboto Mono', 'Courier New', monospace;
+      font-size: 9px;
+      line-height: 1.35;
+      letter-spacing: 0.04em;
+      white-space: nowrap;
+      /* nudge clear of the dot; will-change keeps the per-frame transform cheap */
+      margin: -7px 0 0 9px;
+      will-change: transform;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 8px rgba(0,0,0,0.7);
+    }
+
+    .sc-label .nm {
+      display: block;
+      font-weight: 700;
+      opacity: 0.92;
+    }
+
+    .sc-label .st {
+      display: block;
+      color: rgba(255,255,255,0.45);
+    }
+
+    /* Epoch line sits quietest of the three — it is reference, not readout */
+    .sc-label .ut {
+      display: block;
+      font-size: 8px;
+      color: rgba(255,255,255,0.30);
+    }
+
+    .pl-label { margin: -6px 0 0 8px; }
+    .pl-label .nm { font-size: 8px; letter-spacing: 0.10em; opacity: 0.75; }
+
+    /* ── Zoom slider (right edge) ──
+       The StarDS treatment: a bare vertical range, nearly invisible at rest so
+       it never competes with the globe, opaque once the hero is hovered. */
+    #zoom-wrap {
+      position: absolute;
+      right: 0.75rem;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 150px; width: 26px;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 20;
+      opacity: 0.28;
+      transition: opacity 0.2s ease;
+    }
+
+    #banner:hover #zoom-wrap,
+    #zoom-wrap:focus-within { opacity: 1; }
+
+    #zoom-wrap input[type=range] {
+      -webkit-appearance: none; appearance: none;
+      width: 150px;              /* becomes the vertical travel after rotating */
+      height: 2px;
+      /* +90deg where StarDS uses -90: this value is camera DISTANCE, so the
+         minimum belongs at the top for dragging up to mean zooming in. */
+      transform: rotate(90deg);
+      background: rgba(255,255,255,0.25);
+      border-radius: 2px;
+      outline: none;
+      cursor: ns-resize;
+    }
+
+    #zoom-wrap input[type=range]::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 12px; height: 12px;
+      border: none; border-radius: 50%;
+      background: rgba(255,255,255,0.75);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+
+    #zoom-wrap input[type=range]::-moz-range-thumb {
+      width: 12px; height: 12px;
+      border: none; border-radius: 50%;
+      background: rgba(255,255,255,0.75);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.5);
+    }
+
+    #zoom-wrap input[type=range]::-moz-range-track {
+      height: 2px;
+      background: rgba(255,255,255,0.25);
+      border-radius: 2px;
+    }
+
+    /* ── Data-source status dot (top-left) ── */
+    #status {
+      position: absolute;
+      top: 14px; left: 14px;
+      z-index: 20;
+      display: flex; align-items: center; gap: 6px;
+      font-family: 'Roboto Mono', 'Courier New', monospace;
+      font-size: 8px;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+      color: rgba(255,255,255,0.30);
+      cursor: default;
+    }
+
+    #status .dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.30);
+      box-shadow: 0 0 6px rgba(255,255,255,0.22);
+      transition: background 0.6s, box-shadow 0.6s;
+    }
+
+    #status.probing .dot { animation: statusPulse 1.4s ease-in-out infinite; }
+
+    #status.live .dot {
+      background: #3FD97F;
+      box-shadow: 0 0 7px rgba(63,217,127,0.85), 0 0 15px rgba(63,217,127,0.35);
+    }
+
+    /* Fallback uses the library's own red-orange */
+    #status.cache .dot {
+      background: #E84826;
+      box-shadow: 0 0 7px rgba(232,72,38,0.85), 0 0 15px rgba(232,72,38,0.35);
+    }
+
+    /* The dot alone is the ambient signal; wording appears only on hover */
+    #status .txt { opacity: 0; transition: opacity 0.35s; }
+    #status:hover .txt { opacity: 1; }
+
+    @keyframes statusPulse { 0%, 100% { opacity: 0.25 } 50% { opacity: 0.95 } }
+
+    /* Narrow frames: the eyebrow is a nowrap pill and the buttons are wide, so
+       both need trimming before they reach the edge. Mirrors the equivalent
+       breakpoint in StarDS. (em here is the 16px initial size, not the root
+       override, so this is ~719px of iframe width.) */
+    @media screen and (max-width: 44.9em) {
+      #text-overlay { width: 62%; padding: 2rem 0.75rem 3rem 1rem; }
+      #text-overlay .eyebrow { font-size: 0.56rem; letter-spacing: 0.10em; }
+      #text-overlay .btn { font-size: 0.85rem; padding: 0.55em 1.3em; }
+      /* Bounded on both sides here: it wraps to two lines at this width and
+         would otherwise run to the very edge of the frame. */
+      #caption { left: 1rem; right: 1rem; font-size: 0.6rem; }
+      #zoom-wrap { display: none; }
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div id="banner">
+    <canvas id="mars-canvas"></canvas>
+
+    <div id="text-overlay">
+      <span class="eyebrow">U.S. Geological Survey &middot; Astrogeology</span>
+
+      <h1 class="title">
+        <span class="word">SPICE</span>
+        <span class="word">QUERY</span>
+        <span class="word">LIBRARY</span>
+      </h1>
+
+      <!-- target="_top" so the links drive the host page, not this frame -->
+      <p class="cta">
+        <a class="btn btn--primary" href="../#getting-started" target="_top">Get started</a>
+        <a class="btn" href="../SpiceQLCPPAPI/namespaces/" target="_top">API reference</a>
+      </p>
+    </div>
+
+    <div id="labels"></div>
+
+    <div id="status" class="probing" title="Contacting the SpiceQL API…">
+      <span class="dot"></span><span class="txt">SpiceQL</span>
+    </div>
+
+    <div id="caption">
+      <span>Orbits derived from real NAIF SPICE kernel data obtained via SpiceQL.</span>
+      <span class="live-only">Rendered in real time from the SpiceQL REST API.</span>
+    </div>
+
+    <div id="zoom-wrap">
+      <!-- max comes from ZOOM_MAX: the radial compression is solved against it -->
+      <input type="range" id="zoom" min="1.5" step="0.1"
+             aria-label="Camera distance from Mars">
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // ═══════════════════════════════════════════════════════════
+    // Constants
+    // ═══════════════════════════════════════════════════════════
+
+    const SPICEQL   = 'https://astrogeology.usgs.gov/apis/spiceql/latest';
+    const CACHE_URL = 'ephemeris-cache.msgpack';
+
+    // ── Hero tunables ──────────────────────────────────────────
+    // Graticule density, and where the camera rests. CAMERA_DIST is in Mars
+    // equatorial radii and also seeds the zoom slider, so this is the single
+    // place the opening framing is set.
+    const LNG_SEGMENTS = 24;    // meridians
+    const LAT_SEGMENTS = 16;    // parallels
+    const CAMERA_DIST  = 1.6;
+    const ZOOM_MAX     = 120;   // far end of the slider; LOG_K is solved against
+                                // it, so the two move together
+
+    const MARS_EQ_R = 3396.19;       // km — NAIF PCK pck00011
+    const MARS_PO_R = 3376.20;       // km
+    const SCALE     = 1 / MARS_EQ_R; // world units per km
+    const AU        = 1.495978707e8; // km
+
+    const TRAIL_LEN = 22;      // comet tail length, in buffer samples
+    const TRAIL_FALLOFF = 1.8; // >1 concentrates brightness near the head
+
+    // Mission seconds per wall-clock second. Driving playback from a time
+    // compression rather than a fixed replay duration keeps each craft at its
+    // true relative speed — MRO laps its 1.86 h orbit while Viking 1 crawls
+    // through 23.5 h — and makes the rate independent of buffer density, so a
+    // live buffer can swap in without any change in motion.
+    const TIME_COMPRESSION = 600;
+
+    // Wall-clock seconds for one Earth orbit. Every planet is driven from this
+    // single clock, so their relative speeds stay physically correct.
+    // The planets need their own clock: no single compression can show both a
+    // 1.9 h spacecraft orbit and Neptune's 165 years. Each label states the UTC
+    // it is actually showing, so the two layers stay self-describing.
+    const PLANET_YEAR_S = 24;
+    const OBLIQUITY = 23.4392911; // deg, ECLIPJ2000 → J2000 equatorial
+
+    // True scale is impossible in one view: at 1 unit = 1 Mars radius Neptune
+    // lands 1.3 million units out. Directions come straight from SPICE; only
+    // the radius is compressed, logarithmically, so every orbit fits one frame.
+    // Wider than a tight fit on purpose — the inner four sit within a couple of
+    // AU of each other, so the whole system has to be stretched for them to
+    // separate on screen at all.
+    //
+    // LOG_K is the scale: it sets the layout against the frame's right edge at
+    // the far end of the zoom slider. Neptune at aphelion, with Mars at ITS
+    // aphelion on the far side (the view is Mars-centred, so that offset counts),
+    // sits 112.2 u out — and the hero box is 2.259 wide by 1 tall, so a 45° FOV
+    // at z = ZOOM_MAX puts the right edge at tan(22.5°)·120·2.259 = 112.3 u.
+    // Change ZOOM_MAX or the box aspect and this wants re-solving.
+    // LOG_C sets how much of that budget the inner system gets; it is what pries
+    // Mercury/Venus/Earth/Mars apart, so it is left alone when rescaling.
+    const LOG_K = 40.1, LOG_C = 0.31;   // Mercury → 14.1 u, Neptune → 79.9 u
+    const compressAu = rAu => LOG_K * Math.log10(1 + rAu / LOG_C);
+
+    // Equatorial radius (km) and polar/equatorial ratio from NAIF pck00011, the
+    // axial tilt the graticule and rings are drawn at (deg, from the orbit
+    // plane), and ring edges in body radii where there are rings worth drawing.
+    //   Saturn:  C-ring inner, B-ring outer, A-ring outer
+    //   Uranus:  ring 6 inner, epsilon ring
+    // Jupiter and Neptune have rings too, but they are faint strands that would
+    // only add noise at the size these bodies draw.
+    const PLANET_BODY = {
+      MERCURY: { r:  2439.7, flat: 0.99907, tilt:   0.03 },
+      VENUS:   { r:  6051.8, flat: 1.00000, tilt: 177.36 },
+      EARTH:   { r:  6378.14, flat: 0.99665, tilt:  23.44 },
+      MARS:    { r:  3396.19, flat: 0.99411, tilt:  25.19 },
+      JUPITER: { r: 71492.0, flat: 0.93513, tilt:   3.13 },
+      SATURN:  { r: 60268.0, flat: 0.90204, tilt:  26.73, rings: [1.24, 1.95, 2.27] },
+      URANUS:  { r: 25559.0, flat: 0.97707, tilt:  97.77, rings: [1.64, 2.00] },
+      NEPTUNE: { r: 24764.0, flat: 0.98292, tilt:  28.32 },
+    };
+
+    // Body radii get the same treatment as the orbits, and for the same reason:
+    // Jupiter is 21 Mars radii, as wide as the entire compressed system. The
+    // ordering is honest, the ratios are not. The hero globe is the yardstick —
+    // 1 unit = 1 Mars equatorial radius, as everywhere else in this scene — so
+    // Mars comes out at exactly 1 and the giants stay a couple of units across.
+    const PLANET_R_BASE = 1.0, PLANET_R_EXP = 0.25;
+    const displayRadius = rKm =>
+      PLANET_R_BASE * Math.pow(rKm / MARS_EQ_R, PLANET_R_EXP);
+
+    // Graticule density for the planets: the hero globe's, so they read as the
+    // same kind of object. Tunable apart from it if the count ever gets costly.
+    const PLANET_LNG = LNG_SEGMENTS, PLANET_LAT = LAT_SEGMENTS;
+
+    // Comet trail behind each planet. Budgeted in world units rather than
+    // samples: every buffer holds one full orbit, so a fixed sample count would
+    // be a fixed ANGLE, and Neptune's would stretch into something that reads
+    // like the orbit ring this replaces.
+    const PLANET_TRAIL_LEN = 12.0;   // world units of arc — scales with LOG_K
+    const PLANET_TRAIL_PTS = 22;     // cap: keeps Mercury's tail from closing
+                                     // the loop, since its whole orbit is 89 u
+
+    const smoothstep = (a, b, x) => {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    };
+
+    // ═══════════════════════════════════════════════════════════
+    // MessagePack reader — only the types the cache emits.
+    // Coordinates arrive as float32 blobs, so a 220×3 buffer becomes a
+    // Float32Array view with no per-number parsing at all.
+    // ═══════════════════════════════════════════════════════════
+
+    function mpDecode(buf) {
+      const dv = new DataView(buf), td = new TextDecoder();
+      let o = 0;
+      const str = n => { const s = td.decode(new Uint8Array(buf, o, n)); o += n; return s; };
+      const bin = n => { const b = buf.slice(o, o + n); o += n; return b; }; // copy ⇒ 4-byte aligned
+      const arr = n => { const a = new Array(n); for (let i = 0; i < n; i++) a[i] = rd(); return a; };
+      const map = n => { const m = {}; for (let i = 0; i < n; i++) m[rd()] = rd(); return m; };
+      function rd() {
+        const t = dv.getUint8(o++);
+        if (t < 0x80) return t;                        // positive fixint
+        if (t >= 0xe0) return t - 256;                 // negative fixint
+        if ((t & 0xf0) === 0x80) return map(t & 0x0f); // fixmap
+        if ((t & 0xf0) === 0x90) return arr(t & 0x0f); // fixarray
+        if ((t & 0xe0) === 0xa0) return str(t & 0x1f); // fixstr
+        let n;
+        switch (t) {
+          case 0xc0: return null;
+          case 0xc2: return false;
+          case 0xc3: return true;
+          case 0xc4: return bin(dv.getUint8(o++));
+          case 0xc5: n = dv.getUint16(o); o += 2; return bin(n);
+          case 0xc6: n = dv.getUint32(o); o += 4; return bin(n);
+          case 0xca: n = dv.getFloat32(o); o += 4; return n;
+          case 0xcb: n = dv.getFloat64(o); o += 8; return n;
+          case 0xcc: return dv.getUint8(o++);
+          case 0xcd: n = dv.getUint16(o); o += 2; return n;
+          case 0xce: n = dv.getUint32(o); o += 4; return n;
+          case 0xd0: return dv.getInt8(o++);
+          case 0xd1: n = dv.getInt16(o); o += 2; return n;
+          case 0xd2: n = dv.getInt32(o); o += 4; return n;
+          case 0xd9: return str(dv.getUint8(o++));
+          case 0xda: n = dv.getUint16(o); o += 2; return str(n);
+          case 0xdc: n = dv.getUint16(o); o += 2; return arr(n);
+          case 0xde: n = dv.getUint16(o); o += 2; return map(n);
+        }
+        throw new Error('msgpack: unsupported byte 0x' + t.toString(16));
+      }
+      return rd();
+    }
+
+    // Float32Array adopts host byte order; the blobs are little-endian.
+    const HOST_LE = new Uint8Array(new Uint32Array([1]).buffer)[0] === 1;
+
+    function floats(blob) {
+      if (!HOST_LE) {
+        const b = new Uint8Array(blob);
+        for (let i = 0; i < b.length; i += 4) {
+          [b[i], b[i + 3]] = [b[i + 3], b[i]];
+          [b[i + 1], b[i + 2]] = [b[i + 2], b[i + 1]];
+        }
+      }
+      return new Float32Array(blob);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Three.js renderer + scene
+    // ═══════════════════════════════════════════════════════════
+
+    const canvas   = document.getElementById('mars-canvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    const PR = Math.min(window.devicePixelRatio, 2);
+    renderer.setPixelRatio(PR);
+    renderer.setClearColor(0x1e1e1e, 1);
+
+    const scene = new THREE.Scene();
+
+    let W = canvas.parentElement.clientWidth  || window.innerWidth;
+    let H = canvas.parentElement.clientHeight || window.innerHeight;
+    renderer.setSize(W, H, false);
+
+    // Far plane must clear the outer star shell at full zoom-out
+    const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1200);
+    camera.position.set(0, 0.4, CAMERA_DIST);
+
+    function updateCameraTarget() {
+      const z       = Math.abs(camera.position.z);
+      const fovHalf = THREE.MathUtils.degToRad(camera.fov / 2);
+      const halfW   = Math.tan(fovHalf) * z * (W / H);
+      // Globe sits at ~2/3 from the left for the hero framing, but that offset
+      // is released as you pull back so the solar system ends up centred.
+      const release = smoothstep(9, 30, z);
+      camera.lookAt(-(halfW / 3) * (1 - release), 0, 0);
+    }
+    updateCameraTarget();
+
+    scene.add(new THREE.AmbientLight(0xffffff, 0.4));
+    const dLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dLight.position.set(3, 2, 4);
+    scene.add(dLight);
+
+    // ═══════════════════════════════════════════════════════════
+    // Volumetric starfield, with per-star brightness and flicker
+    // ═══════════════════════════════════════════════════════════
+
+    const starField = new THREE.Group();
+    scene.add(starField);
+    const starMats = [];
+
+    const STAR_VERT = `
+      attribute vec3  aColor;
+      attribute float aPhase;
+      attribute float aSpeed;
+      attribute float aSize;
+      uniform   float uTime;
+      uniform   float uPR;
+      varying   vec3  vColor;
+      varying   float vTw;
+      void main() {
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        // Two detuned sines: the beat keeps the twinkle from looking metronomic
+        float tw = 0.70
+                 + 0.22 * sin(uTime * aSpeed + aPhase)
+                 + 0.08 * sin(uTime * aSpeed * 2.37 + aPhase * 1.7);
+        vTw = tw;
+        vColor = aColor;
+        // aSize is px at 300 units out, so stars hold size across the zoom range.
+        // Capped at 2.5x: pulled all the way back the camera sits close to the
+        // near wall of the shell, and an uncapped star there would swell into a
+        // blob. At the hero zoom nothing reaches the cap, so it costs nothing.
+        gl_PointSize = aSize * uPR * min(300.0 / -mv.z, 2.5) * (0.85 + 0.15 * tw);
+        gl_Position = projectionMatrix * mv;
+      }`;
+
+    const STAR_FRAG = `
+      varying vec3  vColor;
+      varying float vTw;
+      void main() {
+        float r = length(gl_PointCoord - vec2(0.5));
+        if (r > 0.5) discard;
+        float a = smoothstep(0.5, 0.0, r);
+        gl_FragColor = vec4(vColor * vTw, a * vTw);
+      }`;
+
+    // Stars are scattered through a spherical shell rather than painted on a
+    // skybox, so there is real parallax as the zoom slider moves. The shell sits
+    // well outside the compressed solar system so nothing intersects it.
+    function makeStarLayer(count, rMin, rMax, sizePx, minBright, maxBright) {
+      const pos   = new Float32Array(count * 3);
+      const col   = new Float32Array(count * 3);
+      const phase = new Float32Array(count);
+      const speed = new Float32Array(count);
+      const size  = new Float32Array(count);
+      const c     = new THREE.Color();
+
+      for (let i = 0; i < count; i++) {
+        // Uniform direction on the sphere
+        const z   = 1 - 2 * Math.random();
+        const rxy = Math.sqrt(Math.max(0, 1 - z * z));
+        const th  = Math.random() * 2 * Math.PI;
+        // Cube-root radius keeps density even through the shell's volume
+        const r = Math.cbrt(rMin ** 3 + Math.random() * (rMax ** 3 - rMin ** 3));
+
+        pos[i * 3]     = r * rxy * Math.cos(th);
+        pos[i * 3 + 1] = r * rxy * Math.sin(th);
+        pos[i * 3 + 2] = r * z;
+
+        // Brightness is skewed dim: a few standouts read better than an even field
+        const t      = Math.pow(Math.random(), 1.7);
+        const bright = minBright + t * (maxBright - minBright);
+        // Slight colour temperature spread: cool blue-white through warm amber
+        c.setHSL(0.08 + Math.random() * 0.55, 0.22 * Math.random(), bright);
+        col[i * 3]     = c.r;
+        col[i * 3 + 1] = c.g;
+        col[i * 3 + 2] = c.b;
+
+        phase[i] = Math.random() * Math.PI * 2;
+        speed[i] = 0.25 + Math.random() * 1.9;     // rad/s — slow enough to feel ambient
+        size[i]  = sizePx * (0.75 + 0.5 * t);      // brighter stars read slightly larger
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+      geo.setAttribute('aColor',   new THREE.Float32BufferAttribute(col, 3));
+      geo.setAttribute('aPhase',   new THREE.Float32BufferAttribute(phase, 1));
+      geo.setAttribute('aSpeed',   new THREE.Float32BufferAttribute(speed, 1));
+      geo.setAttribute('aSize',    new THREE.Float32BufferAttribute(size, 1));
+
+      const mat = new THREE.ShaderMaterial({
+        uniforms: { uTime: { value: 0 }, uPR: { value: PR } },
+        vertexShader: STAR_VERT,
+        fragmentShader: STAR_FRAG,
+        transparent: true,
+        depthWrite: false,                  // never occlude orbits or graticule
+        blending: THREE.AdditiveBlending,
+      });
+      starMats.push(mat);
+      starField.add(new THREE.Points(geo, mat));
+    }
+
+    // Counts and sizes are tuned for the shell sitting 150–500 u out, well
+    // clear of Neptune's compressed orbit at ~25 u.
+    makeStarLayer(2800, 150, 500, 1.35, 0.34, 0.66); // distant haze
+    makeStarLayer(480,  140, 420, 2.20, 0.58, 0.88); // nearer, brighter
+    makeStarLayer(80,   130, 380, 3.40, 0.80, 1.00); // a few standouts
+
+    // ═══════════════════════════════════════════════════════════
+    // Wireframe bodies
+    // ═══════════════════════════════════════════════════════════
+
+    // Graticule of parallels and meridians only, on a unit sphere squashed by
+    // `flat`. A WireframeGeometry over a SphereGeometry would also emit each
+    // triangle's hypotenuse, so the arcs are built directly instead.
+    function graticule(wSeg, hSeg, flat) {
+      const pts = [];
+
+      const push = (lat, lon) => pts.push(
+        Math.cos(lat) * Math.cos(lon),
+        Math.sin(lat) * flat,
+        Math.cos(lat) * Math.sin(lon),
+      );
+
+      // Parallels — poles excluded, they degenerate to a point
+      for (let i = 1; i < hSeg; i++) {
+        const lat = -Math.PI / 2 + (i / hSeg) * Math.PI;
+        for (let j = 0; j < wSeg; j++) {
+          push(lat, (j / wSeg) * 2 * Math.PI);
+          push(lat, ((j + 1) / wSeg) * 2 * Math.PI);
+        }
+      }
+
+      // Meridians — full pole-to-pole arcs
+      for (let j = 0; j < wSeg; j++) {
+        const lon = (j / wSeg) * 2 * Math.PI;
+        for (let i = 0; i < hSeg; i++) {
+          push(-Math.PI / 2 + (i / hSeg) * Math.PI, lon);
+          push(-Math.PI / 2 + ((i + 1) / hSeg) * Math.PI, lon);
+        }
+      }
+
+      return new Float32Array(pts);
+    }
+
+    // Flat circle of `segs` points at radius 1 in the body's equatorial plane,
+    // for the ring systems. Closed by LineLoop.
+    function ringLoop(segs) {
+      const pts = new Float32Array(segs * 3);
+      for (let i = 0; i < segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        pts[i * 3]     = Math.cos(a);
+        pts[i * 3 + 1] = 0;
+        pts[i * 3 + 2] = Math.sin(a);
+      }
+      return pts;
+    }
+
+    const marsGroup = new THREE.Group();
+    marsGroup.rotation.z = THREE.MathUtils.degToRad(PLANET_BODY.MARS.tilt);
+    scene.add(marsGroup);
+
+    let globeMesh = null;
+
+    function buildGlobe(wSeg, hSeg) {
+      if (globeMesh) {
+        marsGroup.remove(globeMesh);
+        globeMesh.geometry.dispose();
+        globeMesh.material.dispose();
+      }
+
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(
+        graticule(wSeg, hSeg, MARS_PO_R / MARS_EQ_R), 3));
+
+      globeMesh = new THREE.LineSegments(geo, new THREE.LineBasicMaterial({
+        color: 0xE84826, opacity: 0.72, transparent: true,
+      }));
+      marsGroup.add(globeMesh);
+    }
+
+    buildGlobe(LNG_SEGMENTS, LAT_SEGMENTS);
+
+    // ═══════════════════════════════════════════════════════════
+    // Solar system layer
+    //
+    // Mars is the hero and holds the origin, so this is a Mars-centred view:
+    // the Sun is parked at −compress(Mars) and every planet at
+    // compress(planet) − compress(Mars). Mars therefore lands exactly on the
+    // origin at all times, and the Sun's slow drift is what Mars' own orbit
+    // looks like from Mars.
+    // ═══════════════════════════════════════════════════════════
+
+    const solarFrame = new THREE.Group();          // ECLIPJ2000 → J2000 equatorial
+    solarFrame.rotation.x = THREE.MathUtils.degToRad(OBLIQUITY);
+    scene.add(solarFrame);
+
+    const solarGroup = new THREE.Group();          // translated to keep Mars at origin
+    solarFrame.add(solarGroup);
+
+    const PLANET_VERT = `
+      attribute vec3  aColor;
+      attribute float aSize;
+      uniform   float uPR;
+      varying   vec3  vColor;
+      void main() {
+        vColor = aColor;
+        // No size attenuation: the Sun holds its size across the zoom range
+        gl_PointSize = aSize * uPR;
+        gl_Position  = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }`;
+
+    const SUN_FRAG = `
+      uniform float uOpacity;
+      varying vec3  vColor;
+      void main() {
+        float r = length(gl_PointCoord - vec2(0.5));
+        if (r > 0.5) discard;
+        float core = smoothstep(0.30, 0.0, r);
+        float halo = smoothstep(0.50, 0.10, r);
+        gl_FragColor = vec4(vColor * (0.45 + core), (halo * 0.5 + core) * uOpacity);
+      }`;
+
+    let planets = [];          // [{ name, cpos, body, trail, label, ... }]
+    let sunMat = null;
+    let planetStartMs = 0;
+    const solarMats = [];      // every line material that fades with solarFade
+
+    function buildSolarSystem(recs) {
+      for (const rec of recs) {
+        const spec = PLANET_BODY[rec.name] ?? { r: MARS_EQ_R, flat: 1, tilt: 0 };
+        const raw  = floats(rec.xyz);
+
+        // Compress the path once, up front; the animation and the trail both
+        // read from it and it never changes.
+        const cpos = new Float32Array(raw.length);
+        for (let k = 0; k < rec.n; k++) {
+          const x = raw[k * 3], y = raw[k * 3 + 1], z = raw[k * 3 + 2];
+          const rKm = Math.hypot(x, y, z);
+          const s   = compressAu(rKm / AU) / rKm;   // compressed radius ÷ true radius
+          cpos[k * 3]     = x * s;
+          cpos[k * 3 + 1] = y * s;
+          cpos[k * 3 + 2] = z * s;
+        }
+
+        // Mars holds the origin and is already drawn, at full size, as the hero
+        // globe — so it gets no body of its own, just the position to centre on
+        // and a trail, which lands at the origin and reads as the hero globe's.
+        const isHero = rec.name === 'MARS';
+        let body = null;
+
+        if (!isHero) {
+          body = new THREE.Group();
+          // Obliquity is measured from the orbit plane, and this group's parent
+          // frame IS the ecliptic, so it applies directly. The node the tilt
+          // points toward is not modelled — only its magnitude shows here.
+          body.rotation.z = THREE.MathUtils.degToRad(spec.tilt);
+          solarGroup.add(body);
+
+          const r    = displayRadius(spec.r);
+          const wire = new THREE.BufferGeometry();
+          wire.setAttribute('position', new THREE.BufferAttribute(
+            graticule(PLANET_LNG, PLANET_LAT, spec.flat), 3));
+          const wireMat = new THREE.LineBasicMaterial({
+            color: rec.color, transparent: true, opacity: 0, depthWrite: false,
+          });
+          solarMats.push({ mat: wireMat, peak: 0.85 });
+          const globe = new THREE.LineSegments(wire, wireMat);
+          globe.scale.setScalar(r);
+          body.add(globe);
+
+          for (const edge of spec.rings ?? []) {
+            const rg = new THREE.BufferGeometry();
+            rg.setAttribute('position', new THREE.BufferAttribute(ringLoop(64), 3));
+            const rm = new THREE.LineBasicMaterial({
+              color: rec.color, transparent: true, opacity: 0, depthWrite: false,
+            });
+            solarMats.push({ mat: rm, peak: 0.55 });
+            const loop = new THREE.LineLoop(rg, rm);
+            loop.scale.setScalar(r * edge);
+            body.add(loop);
+          }
+        }
+
+        // Trail length in samples, from the arc budget. Every buffer spans one
+        // period, so the mean step is the orbit's circumference / spans.
+        const spans = rec.n - 1;
+        let arc = 0;
+        for (let k = 0; k < spans; k++) {
+          arc += Math.hypot(cpos[(k + 1) * 3]     - cpos[k * 3],
+                            cpos[(k + 1) * 3 + 1] - cpos[k * 3 + 1],
+                            cpos[(k + 1) * 3 + 2] - cpos[k * 3 + 2]);
+        }
+        const trailPts = Math.max(3, Math.min(PLANET_TRAIL_PTS,
+          Math.round(PLANET_TRAIL_LEN / (arc / spans)) + 1));
+
+        let trail;
+        {
+          const tg  = new THREE.BufferGeometry();
+          const tp  = new THREE.BufferAttribute(new Float32Array(trailPts * 3), 3);
+          tp.setUsage(THREE.DynamicDrawUsage);
+          tg.setAttribute('position', tp);
+
+          // Same fade-to-black ramp as the spacecraft tails: vertex 0 is always
+          // the head, so it is fixed in index space and built once.
+          const base = new THREE.Color(rec.color);
+          const cols = new Float32Array(trailPts * 3);
+          for (let i = 0; i < trailPts; i++) {
+            const f = Math.pow(1 - i / (trailPts - 1), TRAIL_FALLOFF);
+            cols[i * 3]     = base.r * f;
+            cols[i * 3 + 1] = base.g * f;
+            cols[i * 3 + 2] = base.b * f;
+          }
+          tg.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+
+          const tm = new THREE.LineBasicMaterial({
+            vertexColors: true, transparent: true, opacity: 0, depthWrite: false,
+          });
+          solarMats.push({ mat: tm, peak: 0.9 });
+          trail = new THREE.Line(tg, tm);
+          trail.frustumCulled = false;      // rewritten every frame
+          solarGroup.add(trail);
+        }
+
+        planets.push({
+          name: rec.name, cpos, n: rec.n, periodDays: rec.periodDays,
+          label: makeLabel(rec.label, rec.color, 'pl-label'),
+          body, trail, trailPts, isHero,
+          spin: 0.06 + Math.random() * 0.05,   // decorative, see the loop
+        });
+      }
+
+      // Sun at the solar-system origin, inside solarGroup so the Mars-centring
+      // translation carries it along.
+      const sunGeo = new THREE.BufferGeometry();
+      sunGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0], 3));
+      sunGeo.setAttribute('aColor',   new THREE.Float32BufferAttribute([1.0, 0.95, 0.80], 3));
+      sunGeo.setAttribute('aSize',    new THREE.Float32BufferAttribute([16], 1));
+      sunMat = new THREE.ShaderMaterial({
+        uniforms: { uPR: { value: PR }, uOpacity: { value: 0 } },
+        vertexShader: PLANET_VERT, fragmentShader: SUN_FRAG,
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+      });
+      solarGroup.add(new THREE.Points(sunGeo, sunMat));
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Labels
+    // ═══════════════════════════════════════════════════════════
+
+    const labelHost = document.getElementById('labels');
+
+    function makeLabel(text, color, extraClass) {
+      const hex = '#' + color.toString(16).padStart(6, '0');
+      const el  = document.createElement('div');
+      el.className = 'sc-label' + (extraClass ? ' ' + extraClass : '');
+      el.style.visibility = 'hidden';
+      el.innerHTML = `<span class="nm" style="color:${hex}">${text}</span>`
+                   + `<span class="st"></span><span class="ut"></span>`;
+      labelHost.appendChild(el);
+      // The CSS margin offsets the box from the transform origin, so edge
+      // clamping has to know it. Read it once here rather than per frame.
+      const cs = getComputedStyle(el);
+      return {
+        el, st: el.querySelector('.st'), ut: el.querySelector('.ut'),
+        mx: parseFloat(cs.marginLeft) || 0,
+        my: parseFloat(cs.marginTop)  || 0,
+        w: 0, h: 0,   // measured lazily, refreshed only when the text changes
+      };
+    }
+
+    // Reading offsetWidth forces layout, so do it only on the ~4 Hz text tick
+    // and not on the 60 Hz transform update.
+    function measureLabel(label) {
+      label.w = label.el.offsetWidth;
+      label.h = label.el.offsetHeight;
+    }
+
+    const pad2 = n => String(n).padStart(2, '0');
+
+    function fmtUtc(ms, withTime) {
+      const d = new Date(ms);
+      const date = `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+      if (!withTime) return date;
+      return `${date} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())}:${pad2(d.getUTCSeconds())}Z`;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Spacecraft
+    // ═══════════════════════════════════════════════════════════
+
+    const craft = [];   // [{ rec, pos, n, index, frac, dot, trail, label }]
+
+    function buildCraft(recs) {
+      for (const rec of recs) {
+        const dot = new THREE.Mesh(
+          new THREE.SphereGeometry(0.013, 10, 8),
+          new THREE.MeshBasicMaterial({ color: rec.color }),
+        );
+        scene.add(dot);
+
+        const trailGeo = new THREE.BufferGeometry();
+        const posAttr  = new THREE.BufferAttribute(new Float32Array(TRAIL_LEN * 3), 3);
+        posAttr.setUsage(THREE.DynamicDrawUsage);
+        trailGeo.setAttribute('position', posAttr);
+
+        // Vertex 0 is always the head, so the brightness ramp is fixed in index
+        // space and only needs building once. Fading toward black reads as a
+        // fade to transparent against the dark backdrop.
+        const base = new THREE.Color(rec.color);
+        const cols = new Float32Array(TRAIL_LEN * 3);
+        for (let i = 0; i < TRAIL_LEN; i++) {
+          const fade = Math.pow(1 - i / (TRAIL_LEN - 1), TRAIL_FALLOFF);
+          cols[i * 3]     = base.r * fade;
+          cols[i * 3 + 1] = base.g * fade;
+          cols[i * 3 + 2] = base.b * fade;
+        }
+        trailGeo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
+        trailGeo.setDrawRange(0, 0);
+
+        const trail = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({
+          vertexColors: true, transparent: true, opacity: 0.95,
+        }));
+        trail.frustumCulled = false;
+        scene.add(trail);
+
+        craft.push({
+          name: rec.name, target: rec.target, mission: rec.mission,
+          startMs: Date.parse(rec.startUtc), startEt: rec.startEt, stepSec: rec.stepSec,
+          windowSec: rec.windowSec, nRecords: rec.n,
+          pos: scaleToWorld(floats(rec.xyz)), n: rec.n,
+          index: 0, frac: 0, live: false,
+          dot, trail, label: makeLabel(rec.label, rec.color),
+        });
+      }
+    }
+
+    // km → world units, in place
+    function scaleToWorld(f) {
+      for (let i = 0; i < f.length; i++) f[i] *= SCALE;
+      return f;
+    }
+
+    // Radius of the reference spheroid at a given planetocentric latitude, so the
+    // reported altitude accounts for Mars' polar flattening.
+    function spheroidRadius(sinLat) {
+      const a2 = MARS_EQ_R * MARS_EQ_R;
+      const b2 = MARS_PO_R * MARS_PO_R;
+      const s2 = sinLat * sinLat;
+      return (MARS_EQ_R * MARS_PO_R) / Math.sqrt(b2 * (1 - s2) + a2 * s2);
+    }
+
+    // Mars' north pole as a unit vector in J2000, which is the frame the
+    // spacecraft vectors arrive in. Latitude is the angle out of Mars' equator,
+    // so it is this direction the position has to be projected onto — NOT a
+    // coordinate axis, since the pole is 37° off J2000 +z.
+    // RA 317.68143°, Dec 52.88650°: the values the REST API's own kernels use.
+    // Recovered by querying MRO in both IAU_MARS and J2000 over the same 300
+    // epochs and least-squares solving p from p · r_J2000 = z_IAU_MARS; the
+    // result lands 0.02° from these constants, and reproduces SPICE's own
+    // planetocentric latitude to within 13 m of altitude for all five craft.
+    // (Note this is the older IAU-2000 pole, not pck00011's 317.269/54.433 —
+    // that one is off by 1.6° in Dec here and would put the altitude out by km.)
+    const MARS_POLE = (() => {
+      const ra = 317.68143 * Math.PI / 180, dec = 52.88650 * Math.PI / 180;
+      return {
+        x: Math.cos(dec) * Math.cos(ra),
+        y: Math.cos(dec) * Math.sin(ra),
+        z: Math.sin(dec),
+      };
+    })();
+
+    // ═══════════════════════════════════════════════════════════
+    // Data loading — cached SpiceQL first, live SpiceQL on top
+    // ═══════════════════════════════════════════════════════════
+
+    const statusEl = document.getElementById('status');
+    const bannerEl = document.getElementById('banner');
+
+    function setStatus(state, title) {
+      statusEl.className = state;
+      statusEl.title = title;
+      statusEl.querySelector('.txt').textContent =
+        state === 'live' ? 'SpiceQL live' : state === 'cache' ? 'SpiceQL cached' : 'SpiceQL';
+      // The caption's second line claims the render is live, so it is tied to
+      // the same verdict as the green dot rather than set independently.
+      bannerEl.classList.toggle('is-live', state === 'live');
+    }
+
+    let cacheMeta = null;
+
+    async function loadCache() {
+      const r = await fetch(CACHE_URL, { cache: 'force-cache' });
+      if (!r.ok) throw new Error(`cache ${r.status}`);
+      const doc = mpDecode(await r.arrayBuffer());
+      cacheMeta = doc;
+      buildCraft(doc.spacecraft);
+      planetStartMs = Date.parse(doc.planets[0].startUtc);
+      buildSolarSystem(doc.planets);
+    }
+
+    async function fetchStatesRanged(c) {
+      const url = new URL(`${SPICEQL}/getTargetStatesRanged`);
+      // Re-query the cache's own epoch and window: that epoch is known to be
+      // covered by the server's kernels, where "now" is not for most of these
+      // missions, and matching the window keeps stepSec — and therefore the
+      // playback rate — identical when the live buffer swaps in.
+      url.searchParams.set('startEt',       String(c.startEt));
+      url.searchParams.set('stopEt',        String(c.startEt + c.windowSec));
+      url.searchParams.set('numRecords',    String(c.nRecords));
+      url.searchParams.set('target',        c.target);
+      url.searchParams.set('observer',      'MARS');
+      url.searchParams.set('frame',         'J2000');
+      url.searchParams.set('mission',       c.mission);
+      url.searchParams.set('abcorr',        'NONE');
+      url.searchParams.set('searchKernels', 'true');
+      const r = await fetch(url, { signal: AbortSignal.timeout(20000) });
+      if (!r.ok) throw new Error(`getTargetStatesRanged ${r.status}`);
+      // Each element: [x, y, z, vx, vy, vz, lt] in km
+      const rows = (await r.json()).body.return;
+      if (!Array.isArray(rows) || rows.length < 2) throw new Error('empty response');
+      const out = new Float32Array(rows.length * 3);
+      for (let i = 0; i < rows.length; i++) {
+        out[i * 3]     = rows[i][0] * SCALE;
+        out[i * 3 + 1] = rows[i][1] * SCALE;
+        out[i * 3 + 2] = rows[i][2] * SCALE;
+      }
+      return { pos: out, n: rows.length };
+    }
+
+    // Planets are deliberately not re-fetched: planetary ephemerides are
+    // deterministic, so a live call would return exactly the cached values at
+    // the cost of eight long-span queries on every page load.
+    async function trySpiceQL() {
+      const results = await Promise.allSettled(craft.map(async c => {
+        const { pos, n } = await fetchStatesRanged(c);
+        // Rescale the playhead into the new buffer so the swap is seamless and
+        // the index can never point past a shorter array.
+        const phase = c.n ? c.index / c.n : 0;
+        c.pos   = pos;
+        c.n     = n;
+        c.index = Math.floor(phase * n) % n;
+        c.frac  = 0;
+        c.live  = true;
+      }));
+
+      const ok = results.filter(r => r.status === 'fulfilled').length;
+      const sync = cacheMeta?.syncEpochUtc?.slice(0, 10) ?? '';
+      if (ok === craft.length) {
+        setStatus('live',
+          `Live SpiceQL: all ${ok} orbits fetched from the REST API.\n` +
+          `MRO, Odyssey and Mars Express at ${sync}; MGS and Viking 1 at their own epochs.`);
+      } else {
+        setStatus('cache',
+          `SpiceQL API unreachable for ${craft.length - ok} of ${craft.length} orbits — ` +
+          `showing cached SPICE data bundled with the docs.`);
+      }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Per-frame label placement
+    // ═══════════════════════════════════════════════════════════
+
+    const projected = new THREE.Vector3();
+
+    const hideLabel = label => { label.el.style.visibility = 'hidden'; };
+
+    // Labels are placed at their body and left free to overlap. Nudging them
+    // apart was worse: it moved text away from the dot it annotates, so a
+    // reader could not tell which label belonged to which craft.
+    //
+    // A body that leaves the frame keeps its label, pinned to the edge it went
+    // out of, so its direction relative to the current view stays readable.
+    // Pinned labels are dimmed, because at the edge they no longer sit on the
+    // thing they describe and should not look like they annotate what is there.
+    const EDGE_PAD = 6, PINNED_DIM = 0.55;
+
+    function placeLabel(label, v, fade) {
+      if (fade <= 0.02) { hideLabel(label); return false; }
+      projected.copy(v).project(camera);
+
+      let nx = projected.x, ny = projected.y;
+      // Behind the camera the perspective divide mirrors x and y, so a body
+      // over your shoulder projects to the opposite side of the frame. Flip it
+      // back and push it onto the unit square so the clamp drives it to the
+      // edge it actually lies past.
+      if (projected.z > 1) {
+        const s = Math.max(Math.abs(nx), Math.abs(ny)) || 1;
+        nx = -nx / s;
+        ny = -ny / s;
+      }
+
+      if (!label.w) measureLabel(label);
+      // Transform origin, then the box the margin puts it in
+      let sx = (nx * 0.5 + 0.5) * W;
+      let sy = (-ny * 0.5 + 0.5) * H;
+      const maxX = Math.max(EDGE_PAD, W - label.w - EDGE_PAD);
+      const maxY = Math.max(EDGE_PAD, H - label.h - EDGE_PAD);
+      const cx = Math.min(Math.max(sx + label.mx, EDGE_PAD), maxX) - label.mx;
+      const cy = Math.min(Math.max(sy + label.my, EDGE_PAD), maxY) - label.my;
+      const pinned = cx !== sx || cy !== sy;
+
+      label.el.style.transform  = `translate(${cx.toFixed(1)}px, ${cy.toFixed(1)}px)`;
+      label.el.style.opacity    = (pinned ? fade * PINNED_DIM : fade).toFixed(2);
+      label.el.style.visibility = 'visible';
+      return true;
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Animation loop
+    // ═══════════════════════════════════════════════════════════
+
+    const clock  = new THREE.Clock();
+    const marsC  = new THREE.Vector3();   // compressed Mars, i.e. the Sun's offset
+    const bodyW  = new THREE.Vector3();
+    let textTimer = 0, elapsed = 0, simDays = 0;
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.1);
+      elapsed += dt;
+
+      for (const m of starMats) m.uniforms.uTime.value = elapsed;
+
+      marsGroup.rotation.y += dt * 0.021;
+      starField.rotation.y += dt * 0.0016; // barely-there drift so it feels alive
+
+      // The solar layer only earns screen space once you pull back, so the hero
+      // framing at the default zoom is untouched. The fade-in window tracks
+      // LOG_K: the layout now runs out to 112 u, so arriving any earlier just
+      // means a frame of empty space with every label pinned to an edge.
+      const z         = Math.abs(camera.position.z);
+      const solarFade = smoothstep(21, 42, z);
+      const craftFade = 1 - smoothstep(14, 24, z);
+      updateCameraTarget();
+
+      textTimer += dt;
+      const refreshText = textTimer >= 0.25;   // ~4×/s keeps the digits legible
+      if (refreshText) textTimer = 0;
+
+      // ── Planets ──
+      if (planets.length) {
+        simDays += dt * (365.256 / PLANET_YEAR_S);
+        sunMat.uniforms.uOpacity.value = solarFade;
+        for (const s of solarMats) s.mat.opacity = solarFade * s.peak;
+        const solarVisible = solarFade > 0.02;
+
+        for (const p of planets) {
+          // Every buffer spans exactly one period from the same start epoch, so
+          // one shared clock indexes them all at a single consistent instant.
+          const spans = p.n - 1;
+          const u  = ((simDays % p.periodDays) / p.periodDays) * spans;
+          const i0 = Math.floor(u) % spans;
+          const i1 = (i0 + 1) % spans;
+          const f  = u - Math.floor(u);
+          const x = p.cpos[i0 * 3]     + (p.cpos[i1 * 3]     - p.cpos[i0 * 3])     * f;
+          const y = p.cpos[i0 * 3 + 1] + (p.cpos[i1 * 3 + 1] - p.cpos[i0 * 3 + 1]) * f;
+          const zc = p.cpos[i0 * 3 + 2] + (p.cpos[i1 * 3 + 2] - p.cpos[i0 * 3 + 2]) * f;
+          p.x = x; p.y = y; p.z = zc;
+
+          if (p.isHero) marsC.set(x, y, zc);
+
+          // At the resting zoom this layer is invisible, and that is the frame
+          // almost everyone sees — so stop before the per-frame buffer writes.
+          if (!solarVisible) {
+            if (p.body) p.body.visible = false;
+            p.trail.visible = false;
+            continue;
+          }
+
+          // Mars has no body of its own — the hero globe is standing in for it,
+          // and the centring translation parks this trail's head right on it.
+          if (p.body) {
+            p.body.position.set(x, y, zc);
+            p.body.visible = true;
+            // Decorative, like the hero globe's own spin. The real rotation rates
+            // cannot be shown on this clock — it runs at 15 days per second, so
+            // Earth would turn 15 times every second.
+            p.body.rotation.y += dt * p.spin;
+          }
+
+          // Trail: interpolated head, then the samples behind it
+          const arr = p.trail.geometry.attributes.position.array;
+          arr[0] = x; arr[1] = y; arr[2] = zc;
+          for (let i = 1; i < p.trailPts; i++) {
+            const k = ((i0 - i + 1) % spans + spans) % spans;
+            arr[i * 3]     = p.cpos[k * 3];
+            arr[i * 3 + 1] = p.cpos[k * 3 + 1];
+            arr[i * 3 + 2] = p.cpos[k * 3 + 2];
+          }
+          p.trail.geometry.attributes.position.needsUpdate = true;
+          p.trail.visible = true;
+        }
+
+        // Mars sits at the world origin at every zoom level, so the camera has
+        // something fixed to hold centre on however far back it pulls.
+        solarGroup.position.set(-marsC.x, -marsC.y, -marsC.z);
+        solarFrame.updateMatrixWorld(true);
+
+        const planetMs = planetStartMs + simDays * 86400000;
+        for (const p of planets) {
+          if (p.isHero) { hideLabel(p.label); continue; }
+          bodyW.set(p.x, p.y, p.z).applyMatrix4(solarGroup.matrixWorld);
+          if (!placeLabel(p.label, bodyW, solarFade)) continue;
+          if (refreshText) {
+            // Report the true radius, not the compressed one drawn on screen:
+            // invert rw = K·log10(1 + rAu/C)
+            const rw  = Math.hypot(p.x, p.y, p.z);
+            const rAu = (Math.pow(10, rw / LOG_K) - 1) * LOG_C;
+            p.label.st.textContent = `${rAu.toFixed(2)} AU`;
+            p.label.ut.textContent = fmtUtc(planetMs, false);
+            measureLabel(p.label);
+          }
+        }
+      }
+
+      // ── Spacecraft ──
+      for (const c of craft) {
+        if (c.n < 2) continue;
+        const len = c.n;
+        c.frac += dt * (TIME_COMPRESSION / c.stepSec);
+        while (c.frac >= 1) {
+          c.frac -= 1;
+          c.index = (c.index + 1) % len;
+        }
+
+        // Lerp between the current sampled position and the next
+        const i0 = c.index * 3;
+        const i1 = ((c.index + 1) % len) * 3;
+        const f  = c.frac;
+        const hx = c.pos[i0]     + (c.pos[i1]     - c.pos[i0])     * f;
+        const hy = c.pos[i0 + 1] + (c.pos[i1 + 1] - c.pos[i0 + 1]) * f;
+        const hz = c.pos[i0 + 2] + (c.pos[i1 + 2] - c.pos[i0 + 2]) * f;
+        c.dot.position.set(hx, hy, hz);
+        c.dot.visible   = craftFade > 0.02;
+        c.trail.visible = craftFade > 0.02;
+
+        // Trail: interpolated head first, then previous sampled positions
+        const arr   = c.trail.geometry.attributes.position.array;
+        const count = Math.min(TRAIL_LEN, len);
+        arr[0] = hx; arr[1] = hy; arr[2] = hz;
+        for (let i = 1; i < count; i++) {
+          const k = (((c.index - i + 1) % len) + len) % len;
+          arr[i * 3]     = c.pos[k * 3];
+          arr[i * 3 + 1] = c.pos[k * 3 + 1];
+          arr[i * 3 + 2] = c.pos[k * 3 + 2];
+        }
+        c.trail.geometry.attributes.position.needsUpdate = true;
+        c.trail.geometry.setDrawRange(0, count);
+        c.trail.material.opacity = 0.95 * craftFade;
+
+        const shown = placeLabel(c.label, c.dot.position, craftFade);
+
+        if (shown && refreshText) {
+          const r    = Math.hypot(hx, hy, hz);
+          const rKm  = r * MARS_EQ_R;
+          // sin(latitude) is the position's component ALONG MARS' POLE, not along
+          // any J2000 axis. Getting this wrong reads low by up to 18 km, since it
+          // under-applies the flattening: MRO's polar orbit came out 234–302 km
+          // instead of SPICE's own 251–317 km.
+          const sinLat = (hx * MARS_POLE.x + hy * MARS_POLE.y + hz * MARS_POLE.z) / r;
+          const alt  = rKm - spheroidRadius(sinLat);
+          const lat  = THREE.MathUtils.radToDeg(Math.asin(sinLat));
+          c.label.st.textContent =
+            `ALT ${alt.toFixed(0).padStart(5)} km  LAT ${lat >= 0 ? '+' : ''}${lat.toFixed(1)}°`;
+          // Each craft carries its own epoch — these missions never overlapped
+          c.label.ut.textContent =
+            fmtUtc(c.startMs + (c.index + c.frac) * c.stepSec * 1000, true);
+          measureLabel(c.label);
+        }
+      }
+
+      renderer.render(scene, camera);
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    // Zoom
+    // ═══════════════════════════════════════════════════════════
+
+    const zoomInput = document.getElementById('zoom');
+    zoomInput.max   = ZOOM_MAX;             // set before value, or it clamps
+    zoomInput.value = CAMERA_DIST;          // constant owns the resting framing
+
+    zoomInput.addEventListener('input', function () {
+      camera.position.z = parseFloat(this.value);
+      updateCameraTarget();
+    });
+
+    // ═══════════════════════════════════════════════════════════
+    // Resize
+    // ═══════════════════════════════════════════════════════════
+
+    const resizeObs = new ResizeObserver(() => {
+      W = canvas.parentElement.clientWidth  || window.innerWidth;
+      H = canvas.parentElement.clientHeight || window.innerHeight;
+      renderer.setSize(W, H, false);
+      camera.aspect = W / H;
+      camera.updateProjectionMatrix();
+      updateCameraTarget();
+    });
+    resizeObs.observe(document.getElementById('banner'));
+
+    // ═══════════════════════════════════════════════════════════
+    // Bootstrap: cached SPICE renders immediately, live SpiceQL layers on top
+    // ═══════════════════════════════════════════════════════════
+
+    animate();
+
+    loadCache()
+      .then(() => {
+        // Stay on the neutral pulse until the API verdict is in, so the dot
+        // never flashes "failed" during a request that is about to succeed.
+        setStatus('probing', 'Cached SPICE data rendering — contacting the SpiceQL API…');
+        return trySpiceQL();
+      })
+      .catch(err => {
+        setStatus('cache', `Ephemeris cache failed to load: ${err.message}`);
+        console.error('[mars-banner]', err);
+      });
+  </script>
+</body>
+</html>
