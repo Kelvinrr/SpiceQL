@@ -97,6 +97,8 @@
       text-shadow: 0 1px 3px rgba(0,0,0,0.6);
     }
 
+    #text-overlay .eyebrow .eb-short { display: none; }
+
     #text-overlay .word {
       display: block;
       font-family: 'Bebas Neue', 'Impact', 'Arial Black', sans-serif;
@@ -126,6 +128,7 @@
       font-size: 1.05rem;
       font-weight: 700;
       line-height: 1.6;
+      white-space: nowrap;                 /* never break "Get started" in two */
       text-decoration: none;
       transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
     }
@@ -312,6 +315,15 @@
 
     @keyframes statusPulse { 0%, 100% { opacity: 0.25 } 50% { opacity: 0.95 } }
 
+    /* Between a phone and a full desktop the column is too narrow to seat both
+       buttons on one row, so they stacked — and around 1000px of frame that was
+       enough to push "API reference" down onto the provenance caption. Trimming
+       the horizontal padding buys the row back. Ahead of the narrower queries
+       below, which override it at equal specificity. */
+    @media screen and (max-width: 72em) {
+      #text-overlay .btn { margin-right: 0.5rem; padding: 0.625em 1.4em; }
+    }
+
     /* Narrow frames: the eyebrow is a nowrap pill and the buttons are wide, so
        both need trimming before they reach the edge. Mirrors the equivalent
        breakpoint in StarDS. (em here is the 16px initial size, not the root
@@ -324,6 +336,54 @@
          would otherwise run to the very edge of the frame. */
       #caption { left: 1rem; right: 1rem; font-size: 0.6rem; }
       #zoom-wrap { display: none; }
+    }
+
+    /* ── Phone-shaped frames ──
+       The hero box is a fixed 26.3rem tall, so a narrow frame is a portrait one,
+       and at this width the side-by-side column stops working: it squeezed the
+       title down to its 30px clamp floor while the spelled-out agency pill ran
+       clean off the right edge. So the overlay takes the whole width, the pill
+       drops to its initialism, SPICE and QUERY share a line, and the buttons
+       shrink to a single row — and all of the width that frees up goes to the
+       title, which is the one thing that has to read at arm's length.
+       (em is the 16px initial size, not the root override, so ~480px of frame.) */
+    @media screen and (max-width: 30em) {
+      #text-overlay {
+        width: 100%;
+        /* Text stacks above the globe rather than beside it, so it starts at the
+           top; updateCameraTarget() seats the globe low to meet it. */
+        justify-content: flex-start;
+        padding: 1.4rem 1rem 2.6rem 1.1rem;
+      }
+
+      #text-overlay .eyebrow {
+        margin-bottom: 0.5rem;
+        padding: 0.25rem 0.6rem;
+        font-size: 0.52rem;
+        letter-spacing: 0.1em;
+      }
+      #text-overlay .eyebrow .eb-long  { display: none; }
+      #text-overlay .eyebrow .eb-short { display: inline; }
+
+      /* Driven by the frame width, not the base rule's 8.6vw, which was tuned
+         against the desktop cap and left the title at its 30px clamp floor here.
+         28vw keeps the longest word, LIBRARY, at ~90% of the available width at
+         every phone size; three lines of it still clear the buttons easily now
+         that the overlay has the full width. Capped at the desktop size. */
+      #text-overlay .word { font-size: min(28vw, var(--title-size)); }
+
+      #text-overlay .cta { flex-wrap: nowrap; }
+      #text-overlay .btn {
+        margin: 0.85rem 0.35rem 0 0;
+        padding: 0.5em 1em;
+        border-width: 0.075rem;
+        font-size: 0.62rem;
+      }
+
+      /* Five readouts in a frame this narrow is a lot of ink; they are not
+         decluttered, by design, so the only lever is to make them quieter. */
+      .sc-label { font-size: 7.5px; margin-top: -6px; }
+      .sc-label .ut { font-size: 6.5px; }
     }
   </style>
 
@@ -340,7 +400,10 @@
     <canvas id="mars-canvas"></canvas>
 
     <div id="text-overlay">
-      <span class="eyebrow">U.S. Geological Survey &middot; Astrogeology</span>
+      <!-- The pill is nowrap, and spelled out it is wider than a phone frame, so
+           it carries both forms and the breakpoint picks one -->
+      <span class="eyebrow"><span class="eb-long">U.S. Geological Survey</span><span
+        class="eb-short">USGS</span> &middot; Astrogeology</span>
 
       <h1 class="title">
         <span class="word">SPICE</span>
@@ -389,7 +452,7 @@
     // place the opening framing is set.
     const LNG_SEGMENTS = 24;    // meridians
     const LAT_SEGMENTS = 16;    // parallels
-    const CAMERA_DIST  = 1.6;
+    const CAMERA_DIST  = 2.2;
     const ZOOM_MAX     = 120;   // far end of the slider; LOG_K is solved against
                                 // it, so the two move together
 
@@ -558,15 +621,42 @@
     const camera = new THREE.PerspectiveCamera(45, W / H, 0.1, 1200);
     camera.position.set(0, 0.4, CAMERA_DIST);
 
+    // 0 on a landscape frame, 1 on a portrait one. The resting distance and both
+    // lookAt offsets are keyed to it, so the phone framing blends in rather than
+    // switching at a threshold the CSS breakpoint would never exactly match.
+    const portraitness = () => 1 - smoothstep(0.85, 1.25, W / H);
+
+    // The 45° FOV is vertical, so how much world fits ACROSS the frame is purely
+    // a matter of aspect. Landscape wants CAMERA_DIST untouched — that is what
+    // lands Mars' limb on the right edge, and the crop is the hero look. Portrait
+    // cannot afford it: at 0.68 the limb falls outside the frame on both sides at
+    // once and the wireframe reads as a mesh of lines rather than a planet. So
+    // pull back toward fitting the globe across the frame, in proportion.
+    // 2.78 = 1.15 globe radii of half-width divided by tan(22.5°).
+    const restingDist = () => {
+      const p = portraitness();
+      return CAMERA_DIST * (1 - p) + Math.max(CAMERA_DIST, 2.78 / (W / H)) * p;
+    };
+
     function updateCameraTarget() {
       const z       = Math.abs(camera.position.z);
       const fovHalf = THREE.MathUtils.degToRad(camera.fov / 2);
-      const halfW   = Math.tan(fovHalf) * z * (W / H);
+      const halfH   = Math.tan(fovHalf) * z;
+      const halfW   = halfH * (W / H);
       // Globe sits at ~2/3 from the left for the hero framing, but that offset
       // is released as you pull back so the solar system ends up centred.
-      const release = smoothstep(9, 30, z);
-      camera.lookAt(-(halfW / 3) * (1 - release), 0, 0);
+      const release  = smoothstep(9, 30, z);
+      const portrait = portraitness();
+      // A portrait frame has no room beside the globe, so the text stacks above
+      // it instead: aim high, which seats the globe in the lower part of the
+      // frame, and give up the sideways offset, which has nothing left to buy.
+      // Both fade out with `release` so a full zoom-out still centres on Mars.
+      camera.lookAt(
+        -(halfW / 3) * (1 - release) * (1 - portrait),
+        halfH * 0.22 * (1 - release) * portrait,
+        0);
     }
+    camera.position.z = restingDist();
     updateCameraTarget();
 
     scene.add(new THREE.AmbientLight(0xffffff, 0.4));
@@ -1352,9 +1442,14 @@
 
     const zoomInput = document.getElementById('zoom');
     zoomInput.max   = ZOOM_MAX;             // set before value, or it clamps
-    zoomInput.value = CAMERA_DIST;          // constant owns the resting framing
+    zoomInput.value = camera.position.z;     // restingDist() owns the framing
+
+    // Once the slider has been dragged, the resting distance stops being ours to
+    // change, so a later resize leaves the chosen zoom alone.
+    let zoomTouched = false;
 
     zoomInput.addEventListener('input', function () {
+      zoomTouched = true;
       camera.position.z = parseFloat(this.value);
       updateCameraTarget();
     });
@@ -1369,6 +1464,12 @@
       renderer.setSize(W, H, false);
       camera.aspect = W / H;
       camera.updateProjectionMatrix();
+      // Rotating a phone changes the aspect, and with it how far back the globe
+      // has to sit to fit the frame.
+      if (!zoomTouched) {
+        camera.position.z = restingDist();
+        zoomInput.value   = camera.position.z;
+      }
       updateCameraTarget();
     });
     resizeObs.observe(document.getElementById('banner'));
