@@ -4,6 +4,7 @@ site_name: "SpiceQL Manual"
 # in-page links stay relative, so the site still works served from any path.
 site_url: "https://doi-usgs.github.io/SpiceQL/"
 
+
 theme:
   name: material
   # Two entries, so the switch is a plain flip between light and dark with no
