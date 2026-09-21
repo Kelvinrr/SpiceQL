@@ -18,7 +18,10 @@ hide:
   }
 </style>
 
-<div class="sq-hero">
+<!-- Add `sq-hero--full` to the class below for a full-screen hero: the banner
+     fills the viewport under the header and the prose starts one scroll down.
+     See the flag's block in assets/extra.css. -->
+<div class="sq-hero sq-hero--full">
   <iframe src="assets/mars-banner.html"
           scrolling="no"
           loading="lazy"
