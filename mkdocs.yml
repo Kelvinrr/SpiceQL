@@ -1,9 +1,28 @@
 site_name: "SpiceQL Manual"
+# Canonical home of the built docs, now that they are published by GitHub Pages
+# rather than synced to S3. Only affects canonical tags and sitemap.xml —
+# in-page links stay relative, so the site still works served from any path.
+site_url: "https://doi-usgs.github.io/SpiceQL/"
 
 theme:
   name: material
+  # Two entries, so the switch is a plain flip between light and dark with no
+  # third "follow the system" stop. The `media` on each is still what decides
+  # which one a first-time visitor lands on — Material picks the entry whose
+  # query matches the OS — after which a click stores the choice and the OS stops
+  # having a say. Each entry's `toggle` is the control shown *while that entry is
+  # active*, so the icon and label describe where the next click goes.
   palette:
-    scheme: slate
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   # favicon: assets/favicon.ico
   site_name_style: bold
   title_style: light 
