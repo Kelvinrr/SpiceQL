@@ -40,24 +40,6 @@ app = FastAPI(
 
 # ---------------------------------------------------------------------------
 # CORS
-#
-# A browser will not let a page read a cross-origin response unless the response
-# says it may, and nothing else in the stack can say it: an Application Load
-# Balancer forwards responses as it gets them and cannot inject
-# Access-Control-Allow-Origin, so this middleware is the only place the header
-# can come from. It only matters for browsers — curl, requests and pyspiceql are
-# unaffected either way, which is why the API worked everywhere except in a page.
-#
-# It went unnoticed while the docs lived at astrogeology.usgs.gov/docs, the same
-# origin as /apis/spiceql, where CORS does not apply. The docs moving to
-# doi-usgs.github.io makes every call from them cross-origin.
-#
-# SPICEQL_CORS_ORIGINS is a comma-separated allow-list, and '*' — the default —
-# allows any origin. That default is deliberate for a public, read-only,
-# unauthenticated data service: an allow-list would silently break the next site
-# that embeds a query, and there is nothing here that a same-origin fetch could
-# not already read anonymously. Set the variable in a deployment that wants it
-# narrowed, e.g. SPICEQL_CORS_ORIGINS=https://doi-usgs.github.io
 _cors_origins = [
     origin.strip()
     for origin in os.environ.get("SPICEQL_CORS_ORIGINS", "*").split(",")
@@ -68,20 +50,9 @@ logger.info(f"CORS allowed origins: {_cors_origins}")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    # No cookies or auth headers are involved. It also cannot be combined with a
-    # '*' origin: the spec requires the exact origin to be echoed for credentialed
-    # requests, and Starlette would send that instead of the wildcard.
     allow_credentials=False,
-    # The endpoints below are GET, plus POST for the two that take a body. OPTIONS
-    # is the preflight itself, which this middleware answers before the request
-    # ever reaches a route.
     allow_methods=["GET", "POST", "OPTIONS"],
-    # Content-Type is what a JSON POST preflights on. A plain GET with no custom
-    # headers is a "simple request" and is not preflighted at all.
     allow_headers=["Content-Type"],
-    # One preflight per day per origin/method rather than one per query — the
-    # POST endpoints are the ones that preflight, and a page plotting a long time
-    # range can make many of them.
     max_age=86400,
 )
 
