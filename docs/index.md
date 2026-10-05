@@ -33,6 +33,124 @@ hide:
 This Library provides a C++ interface querying, reading and writing Naif SPICE kernels. Built on the [Naif Toolkit](https://naif.jpl.nasa.gov/naif/toolkit.html).
 
 
+## Try it over the REST API
+
+The plot below is **two years of Cassini's Saturn tour** — 20 000 states that the
+[hosted service](https://astrogeology.usgs.gov/apis/spiceql/latest/docs) builds
+out of 37 SPKs. The kernels stay on the server: gigabytes that would never be
+worth shipping to a page, and all that comes back is numbers.
+
+Nothing is fetched until you press **Run** — not the plotting library, not a
+state. Edit the code and run it again as often as you like; the pane above the
+code logs every request the snippet makes, with the points each one returned.
+
+<div class="sq-app sq-app--rest" data-sq-rest markdown="1">
+
+<div class="sq-app__kernels">
+  <p class="sq-app__head">
+    <span class="sq-app__title">Requests</span>
+    <span class="sq-app__hint">Every HTTP call the code makes, in order, with what came
+      back — including the points each one returned. Two epoch conversions, then one
+      ranged call that answers with all 20&nbsp;000 states.</span>
+  </p>
+  <ol class="sq-app__stack" data-sq-log></ol>
+</div>
+
+```js
+import Plotly from 'https://cdn.jsdelivr.net/npm/plotly.js-gl3d-dist-min/+esm';
+
+// Every endpoint answers {statusCode, body: {return, kernels}}, so one helper
+// covers the whole API. `plot` is the element below.
+const API = 'https://astrogeology.usgs.gov/apis/spiceql/latest';
+
+async function spiceql(endpoint, params) {
+  const response = await fetch(`${API}/${endpoint}?${new URLSearchParams(params)}`);
+  if (!response.ok) throw new Error(`${endpoint}: HTTP ${response.status}`);
+  // SPICE failures come back INSIDE an HTTP 200 — {statusCode: 500, body:
+  // {error}} — so the envelope is what says whether this worked. Skip this and
+  // a failed call returns a body with no `return`, and the first thing you do
+  // with it throws something unrelated several lines later.
+  const { statusCode, body } = await response.json();
+  if (statusCode !== 200) throw new Error(`${endpoint}: ${body?.error ?? statusCode}`);
+  return body;
+}
+
+// 1. The window: two years of the Saturn tour, inside the equinox mission, and
+//    deliberately all of it later than a ~25 h hole in the Cassini SPKs that
+//    runs from about 2006-11-03 04:00 to 2006-11-04 05:00. getTargetStatesRanged
+//    fails the WHOLE request when any single sampled epoch lands in that hole
+//    (SPICE(SPKINSUFFDATA)), so widening this back across late 2006 only works
+//    with a sample step coarser than the hole itself. At the sample step below
+//    — 58 minutes — the full 2004-2017 tour fails outright.
+const { return: etStart } = await spiceql('utcToEt', { utc: '2008-07-01T00:00:00' });
+const { return: etStop }  = await spiceql('utcToEt', { utc: '2010-09-14T00:00:00' });
+
+// 2. One ranged call for the whole window. Ranged rather than a list of epochs
+//    because the service samples the interval itself — a list of 20 000 ETs
+//    would not begin to fit in a URL. limitSpk: -1 lifts the one-SPK default,
+//    which exists for single-image queries and would otherwise cover a few days
+//    of this. 20 000 records is a 58-minute sample and a 2.6 MB response.
+const { return: states, kernels } = await spiceql('getTargetStatesRanged', {
+  startEt: etStart,
+  stopEt: etStop,
+  numRecords: 20000,
+  target: 'Cassini',
+  observer: 'SATURN BARYCENTER',
+  frame: 'J2000',
+  abcorr: 'None',
+  mission: 'cassini',
+  limitSpk: -1,
+  limitCk: -1,
+  searchKernels: true,
+});
+console.log(`${states.length} states from ${kernels.spk.length} SPKs`);
+
+// 3. Plot it, coloured by date — over two years the orbit precesses and its
+//    apoapsis swings right round, and an undifferentiated tangle hides that.
+const days = states.map((_, i) => (etStart + (i * (etStop - etStart)) / (states.length - 1)));
+
+Plotly.newPlot(plot, [{
+  type: 'scatter3d', mode: 'lines', name: 'Cassini',
+  x: states.map(s => s[0]), y: states.map(s => s[1]), z: states.map(s => s[2]),
+  line: { width: 2, color: days, colorscale: 'YlOrRd', reversescale: true },
+}, {
+  type: 'scatter3d', mode: 'markers', name: 'Saturn barycentre',
+  x: [0], y: [0], z: [0], marker: { size: 4, color: '#E8C36A' },
+}], {
+  margin: { l: 10, r: 10, t: 10, b: 10 },
+  showlegend: false,
+  paper_bgcolor: 'rgba(0,0,0,0)',
+  scene: {
+    // One kilometre is the same length on all three axes, so the orbit keeps
+    // its shape instead of being stretched to fill the box.
+    aspectmode: 'data',
+    camera: { eye: { x: 1.6, y: 1.6, z: 1.1 } },
+    xaxis: { title: 'X (km)' }, yaxis: { title: 'Y (km)' }, zaxis: { title: 'Z (km)' },
+  },
+});
+```
+
+<p class="sq-app__bar">
+  <button class="md-button md-button--primary" type="button" data-sq-run>Run</button>
+  <span class="sq-app__status" data-sq-status role="status">
+    Nothing to download but numbers — the kernels stay on the server. About
+    1.7&nbsp;MB for the plotting library, then 2.6&nbsp;MB for 20&nbsp;000 states.
+  </span>
+</p>
+
+<div class="sq-app__plot" data-sq-plot>
+  <p class="sq-app__placeholder">
+    <span class="sq-app__placeholder-mark" aria-hidden="true"></span>
+    Press <b>Run</b> to plot 20&nbsp;000 Cassini states, fetched live from the
+    service. Nothing is downloaded until you do.
+  </p>
+</div>
+
+</div>
+
+<script type="module" src="assets/spiceql-rest.js"></script>
+
+
 ## Getting Started
 
 We reccomend installing using [miniforge](https://github.com/conda-forge/miniforge) 
@@ -93,6 +211,77 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
     // nx4 aray of quaternions 
     std::cout << orientations.size() << std::endl;
     ```
+
+=== "JavaScript"
+
+    SpiceQL compiles to WebAssembly, so the same `api.h` calls run in the browser
+    through Embind. Two differences shape the example. The browser build ships no
+    HDF5 inventory, so **there is no kernel search** — `searchForKernelsets` and
+    `searchKernels: true` both throw, and kernels are furnished explicitly. And
+    the WASM signatures take no `mission` argument, for the same reason: with
+    nothing to search there is nothing to aim.
+
+    Fetching and furnishing those kernels is the harness's job, not the example's,
+    so it happens in the pane above the code and `spiceql` arrives already loaded.
+    Press **Run** — nothing downloads until you do, and the browser caches it, so
+    a second run is instant.
+
+    <div class="sq-exec" data-sq-exec markdown="1">
+
+    <div class="sq-exec__files">
+      <p class="sq-exec__head">
+        <span class="sq-exec__title">Downloads</span>
+        <span class="sq-exec__hint">The module and the kernels this example furnishes,
+          fetched on Run and then served from the browser cache. One 115&nbsp;KB frame
+          kernel is all it needs: the CTX-to-bus rotation is a fixed mounting offset
+          written down in the FK, so no CK has to be loaded to read it.</span>
+      </p>
+      <ol class="sq-exec__stack" data-sq-downloads></ol>
+    </div>
+
+    ```js
+    // `spiceql` is already loaded with the kernel above furnished, so this is
+    // only the exploitation code. The harness also defaults searchKernels:false
+    // on every call, because kernel search throws in the browser build.
+
+    // The same query as the Python and C++ tabs — CTX relative to the MRO
+    // spacecraft frame — at et 690201375.83, which is 2021-11-14 22:35:06.650.
+    // No mission argument: the WASM signature drops it.
+    const { result: orientations } = spiceql.getTargetOrientations(
+      [690201375.8323615], -74000, -74690);
+
+    const [w, x, y, z, ...angularVelocity] = orientations[0];
+    console.log('quaternion:', [w, x, y, z]);
+    console.log('angular velocity (rad/s):', angularVelocity);
+
+    // Nearly the identity, and the angular velocity is exactly zero — this is a
+    // fixed mounting offset out of the frame kernel, not an attitude that had to
+    // be interpolated from a CK. That is what makes one text kernel enough.
+    const degrees = 2 * Math.acos(Math.min(1, Math.abs(w))) * 180 / Math.PI;
+    console.log(`a fixed rotation of ${degrees.toFixed(4)} degrees`);
+
+    // The one api.h feature the browser build does not have.
+    try {
+      spiceql.getTargetOrientations([690201375.8323615], -74000, -74690,
+                                    { searchKernels: true });
+    } catch (err) {
+      console.log('searchKernels: true ->', err.message);
+    }
+    ```
+
+    <p class="sq-exec__bar">
+      <button class="md-button md-button--primary" type="button" data-sq-run>Run</button>
+      <span class="sq-exec__status" data-sq-status role="status">
+        Nothing runs until you press Run. The first run fetches about
+        3&nbsp;MB — the WASM module, its config DB, and the one kernel above.
+      </span>
+    </p>
+
+    <pre class="sq-exec__out" data-sq-out></pre>
+
+    </div>
+
+<script type="module" src="assets/spiceql-runner.js"></script>
 
 ### Online Interface 
 

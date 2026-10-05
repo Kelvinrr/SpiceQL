@@ -51,6 +51,7 @@ theme:
 
 extra_css: 
   - assets/extra.css
+  - assets/spiceql-applet.css
 
 nav:
   - index.md
@@ -62,6 +63,9 @@ nav:
   - "[ USGS Astrogeology Docs ]" : https://astrogeology.usgs.gov/docs/
 
 markdown_extensions:
+  # Lets the runnable applet on the home page wrap a highlighted code fence in its
+  # own <div markdown="1">, so the kernel stack, the code and the plot are one box.
+  - md_in_html
   - pymdownx.highlight:
       anchor_linenums: true
   - pymdownx.superfences
