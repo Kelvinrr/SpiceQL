@@ -443,22 +443,6 @@ namespace SpiceQL {
           limitQuality = limit_ck;
         } 
 
-        // Sort ASCENDING, lowest quality first.
-        //
-        // The qualities are unioned rather than selected between, so this is
-        // load order: SPICE gives precedence to the last kernel loaded, and the
-        // array this builds is the load order (see the index sort below, and the
-        // "kernel dbs enforce load priority" note with it). Lowest first
-        // therefore means the best available quality wins wherever it has data,
-        // while the tiers underneath it stay loaded to fill what it does not
-        // cover.
-        //
-        // Selecting a single tier was the old behaviour and it assumed a higher
-        // quality is a drop-in replacement for a lower one. For CKs that is not
-        // generally true: LROC's smithed CKs, for instance, are north-pole
-        // tie-point corrections to instrument pointing and carry no spacecraft
-        // bus attitude at all, so on their own no frame chain can be built from
-        // them for any instrument. See issue #154.
         std::sort(qualities.begin(), qualities.end());
 
         // The union across qualities, in load order, plus the best tier that
