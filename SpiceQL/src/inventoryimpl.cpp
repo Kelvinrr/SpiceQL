@@ -1,3 +1,5 @@
+#include <chrono>
+#include <fstream>
 #include <iostream>
 #include <regex>
 #include <mutex>
@@ -117,6 +119,15 @@ namespace SpiceQL {
   
 
   // objs need to be passed in c-style because of a lack of copy contructor in BtreeMap
+  namespace {
+    using DbClock = std::chrono::steady_clock;
+
+    inline double secondsSince(DbClock::time_point t0) {
+      return std::chrono::duration<double>(DbClock::now() - t0).count();
+    }
+  }
+
+
   void collectStartStopTimes(string mission, string type, string quality, TimeIndexedKernels *kernel_times) { 
     SPDLOG_TRACE("In globTimeIntervals.");
     Config conf;
@@ -188,6 +199,24 @@ namespace SpiceQL {
 
     unordered_set<int> seen_codes;
 
+    {
+      SPICEINT_CELL(builtin, 10000);
+      scard_c(0, &builtin);
+      bltfrm_c(SPICE_FRMTYP_ALL, &builtin);
+      checkNaifErrors();
+      SpiceInt nbuiltin = card_c(&builtin);
+      for (SpiceInt i = 0; i < nbuiltin; i++) {
+        SpiceInt fcode = SPICE_CELL_ELEM_I(&builtin, i);
+        SpiceChar fname[128];
+        frmnam_c(fcode, 128, fname);
+        if (strlen(fname) > 0) {
+          insertFramePair((int)fcode, string(fname), m_frame_codes, m_frame_names, seen_codes);
+        }
+      }
+      checkNaifErrors();
+      SPDLOG_DEBUG("collectFrameInfo: {} built-in frames", nbuiltin);
+    }
+
     // Furnish every mission's frame-defining text kernels, then read the NAIF
     // body code<->name associations and enumerate kernel-defined frames. This
     // is the slow, one-time work that runtime resolution then avoids.
@@ -235,10 +264,11 @@ namespace SpiceQL {
         }
       }
 
-      // Kernel-defined and built-in frames (FK TKFRAMEs etc.).
+      // Kernel-defined frames (FK TKFRAMEs etc.) for THIS mission's furnished
+      // kernels. The built-ins were done once above; insertFramePair dedupes by
+      // code, so the union is unchanged.
       SPICEINT_CELL(idset, 10000);
       scard_c(0, &idset);
-      bltfrm_c(SPICE_FRMTYP_ALL, &idset);
       kplfrm_c(SPICE_FRMTYP_ALL, &idset);
       checkNaifErrors();
       SpiceInt nframes = card_c(&idset);
@@ -286,7 +316,13 @@ namespace SpiceQL {
         throw runtime_error("MESSAGE: " + msg + ", ERROR: " + string(e.what()) + ".");
       }
 
+      auto t_total = DbClock::now();
+
+      auto t_phase = DbClock::now();
       Config config; 
+      SPDLOG_INFO("create_database: loading config took {:.2f}s", secondsSince(t_phase));
+
+      t_phase = DbClock::now();
       json json_kernels = {};
       // Verify mlist has acceptable mission names
       vector<string> lowercase_mlist;
@@ -307,19 +343,30 @@ namespace SpiceQL {
         json_kernels = getLatestKernels(config.get()); 
       }
       
+      SPDLOG_INFO("create_database: resolving kernel lists took {:.2f}s", secondsSince(t_phase));
+
       // load time kernels for creating the timed kernel DataBase 
+      t_phase = DbClock::now();
       json lsk_json = getLatestKernels(config["base"].getRecursive("lsk")); 
 
       SPDLOG_TRACE("InventoryImpl LSKs: {}", lsk_json.dump(4));
 
       m_required_kernels.load(lsk_json); 
+      SPDLOG_INFO("create_database: furnishing LSKs took {:.2f}s", secondsSince(t_phase));
 
+      double sec_sclk = 0, sec_kernel_reads = 0, sec_text = 0;
+      size_t n_kernels_read = 0, n_missions = 0;
+
+      t_phase = DbClock::now();
       for (auto &[mission, kernels] : json_kernels.items()) {
         SPDLOG_TRACE("MISSION: {}", mission);
+        n_missions++;
 
+        auto t_step = DbClock::now();
         json sclk_json = getLatestKernels(config[mission].getRecursive("sclk")); 
         SPDLOG_TRACE("{} SCLKs: {}", mission, sclk_json.dump(4)); 
         KernelSet sclks_ks(sclk_json); 
+        sec_sclk += secondsSince(t_step);
 
         for(auto &[kernel_type, kernel_obj] : kernels.items()) { 
           if (kernel_type == "ck" || kernel_type == "spk") { 
@@ -335,12 +382,17 @@ namespace SpiceQL {
                 
                 TimeIndexedKernels *tkernels = new TimeIndexedKernels();
                 // btrees cannot be copied, so use pointers
+                auto t_read = DbClock::now();
                 collectStartStopTimes(mission, kernel_type, quality, tkernels); 
+                sec_kernel_reads += secondsSince(t_read);
+                // file_paths has one entry per kernel actually read
+                n_kernels_read += tkernels->file_paths.size();
                 m_timedep_kerns[map_key] = tkernels;
               }
             }
           } 
           else { // it's a txt kernel or some other non-time dependant kernel 
+            auto t_txt = DbClock::now();
             vector<json::json_pointer> ptrs = findKeyInJson(kernel_obj, "kernels", true); 
             
             for (auto &ptr : ptrs) { 
@@ -357,16 +409,31 @@ namespace SpiceQL {
                 } 
               m_nontimedep_kerns[btree_key] = kernel_vec; 
             } 
+            sec_text += secondsSince(t_txt);
           }
         } 
       }
 
+      SPDLOG_INFO("create_database: {} missions took {:.2f}s "
+                  "(sclk {:.2f}s, kernel time reads {:.2f}s over {} kernels, text {:.2f}s)",
+                  n_missions, secondsSince(t_phase), sec_sclk, sec_kernel_reads,
+                  n_kernels_read, sec_text);
+      if (n_kernels_read) {
+        SPDLOG_INFO("create_database: {:.1f} ms per kernel time read",
+                    sec_kernel_reads * 1000.0 / n_kernels_read);
+      }
+
       // Precompute frame caches (frame list + bidirectional code<->name map)
       // so runtime resolution never needs to furnish slow FKs.
+      t_phase = DbClock::now();
       collectFrameInfo();
+      SPDLOG_INFO("create_database: collectFrameInfo took {:.2f}s", secondsSince(t_phase));
 
       // write everything out
+      t_phase = DbClock::now();
       write_database();
+      SPDLOG_INFO("create_database: write_database took {:.2f}s", secondsSince(t_phase));
+      SPDLOG_INFO("create_database: TOTAL {:.2f}s", secondsSince(t_total));
     }
     else { // load the database
       // read_database();
