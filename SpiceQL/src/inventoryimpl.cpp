@@ -131,19 +131,13 @@ namespace SpiceQL {
     const json &rawConfig() {
       static const json raw = [] {
         json out;
-        for (const fs::path &p : glob(getConfigDirectory(), ".json")) {
-          try {
-            std::ifstream i(p);
-            json j;
-            i >> j;
-            for (auto it = j.begin(); it != j.end(); ++it) {
-              out[it.key()] = it.value();
-            }
-          } catch (std::exception &e) {
-            // Reporting is best-effort: a config we cannot parse costs a
-            // provenance key, not the search itself.
-            SPDLOG_WARN("Could not read config [{}] for quality reporting: {}", p.string(), e.what());
+        try {
+          for (const json &j : getAvailableConfigs()) {
+            out.update(j);
           }
+        } catch (std::exception &e) {
+          // Reporting is best-effort, a bad config shouldn't fail the search
+          SPDLOG_WARN("Could not read configs for quality reporting: {}", e.what());
         }
         return out;
       }();

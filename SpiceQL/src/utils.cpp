@@ -886,6 +886,13 @@ namespace SpiceQL {
         dafus_c(summary, nd, ni, dc, ic);
         checkNaifErrors();
 
+        // Only negative NAIF codes (spacecraft and instruments) get coverage
+        if (ic[0] >= 0) {
+          daffna_c(&found);
+          checkNaifErrors();
+          continue;
+        }
+
         double segStart = dc[0];
         double segStop  = dc[1];
 
