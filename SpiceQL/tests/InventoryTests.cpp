@@ -54,8 +54,10 @@ TEST_F(LroMocQualityKernelSet, TestInventoryQualityUnion) {
   // correction has to come after the bus CK it corrects.
   EXPECT_EQ(cks.back(), "LROC_NPOLE_2017Merged_Lidar2Image_Left_2012_ck.bc");
 
-  // The reported quality is the best tier that contributed.
-  EXPECT_EQ(kernels["moc_ck_quality"], "smithed");
+  // The reported quality is the LOWEST tier that contributed, not the best. The
+  // set only works because the reconstructed bus CK is in it, so calling the
+  // whole thing smithed would promise an accuracy the chain does not have.
+  EXPECT_EQ(kernels["moc_ck_quality"], "reconstructed");
 }
 
 
@@ -69,6 +71,28 @@ TEST_F(LroMocQualityKernelSet, TestInventoryQualityUnionSingleTier) {
   ASSERT_EQ(kernels["ck"].size(), 1);
   EXPECT_EQ(fs::path(kernels["ck"][0]).filename(), "lrolc_1111111_1111111_v11.bc");
   EXPECT_EQ(kernels["lroc_ck_quality"], "reconstructed");
+}
+
+
+TEST_F(LroMocQualityKernelSet, TestInventoryQualityOwnerReporting) {
+  Inventory::create_database();
+  // Searching lroc, whose config declares ck/reconstructed and inherits the rest
+  // from moc via deps. The floor reported for lroc is reconstructed, because the
+  // set only works with moc's bus attitude in it — but moc also contributed a
+  // smithed CK, and that is worth reporting rather than hiding behind the floor.
+  nlohmann::json kernels = Inventory::search_for_kernelset("lroc", {"ck"}, 110000000, 120000000,
+                                                           {"smithed", "reconstructed"},
+                                                           {"smithed", "reconstructed"}, false);
+  SPDLOG_DEBUG("Owner reporting kernels: {}", kernels.dump());
+
+  // The searched name reports the weakest link in its chain.
+  EXPECT_EQ(kernels["lroc_ck_quality"], "reconstructed");
+
+  // The entry that actually declares the smithed tier reports it. Without this
+  // key a caller cannot tell a chain with a smithed correction in it from one
+  // that is reconstructed throughout.
+  ASSERT_TRUE(kernels.contains("moc_ck_quality"));
+  EXPECT_EQ(kernels["moc_ck_quality"], "smithed");
 }
 
 

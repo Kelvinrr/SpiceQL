@@ -2,8 +2,10 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
+#include <map>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 
 // we need to include this to overwrite and other std::fs imports
 #include <ghc/fs_std.hpp>
@@ -124,6 +126,83 @@ namespace SpiceQL {
 
     inline double secondsSince(DbClock::time_point t0) {
       return std::chrono::duration<double>(DbClock::now() - t0).count();
+    }
+
+    // The configs as written on disk, with `deps` still unresolved.
+    //
+    // Config's constructor runs resolveConfigDependencies, which copies an
+    // inherited quality tier into the child entry. That is what makes
+    // lroc/spk/smithed exist in the database at all, but it also erases the fact
+    // that moc is the entry declaring it — and that provenance is what the
+    // per-owner quality keys report. So the raw form is read separately.
+    //
+    // Loaded once per process. search_for_kernelset is hot and otherwise never
+    // touches the config, so this must not become a per-query cost.
+    const json &rawConfig() {
+      static const json raw = [] {
+        json out;
+        for (const fs::path &p : glob(getConfigDirectory(), ".json")) {
+          try {
+            std::ifstream i(p);
+            json j;
+            i >> j;
+            for (auto it = j.begin(); it != j.end(); ++it) {
+              out[it.key()] = it.value();
+            }
+          } catch (std::exception &e) {
+            // Reporting is best-effort: a config we cannot parse costs a
+            // provenance key, not the search itself.
+            SPDLOG_WARN("Could not read config [{}] for quality reporting: {}", p.string(), e.what());
+          }
+        }
+        return out;
+      }();
+      return raw;
+    }
+
+
+    // Every entry in spiceql_name's dependency chain that declares
+    // <type>/<quality>, including spiceql_name itself.
+    //
+    // More than one entry can declare the same tier, and when they do the
+    // resolved list is the merge of all of them rather than an override — lroc
+    // declares ck/reconstructed (soc31, lrolc) and inherits moc's
+    // ck/reconstructed (moc42r), and a search returns kernels from both. So all
+    // of them are owners, not just the nearest.
+    vector<string> qualityOwners(const string &spiceql_name, const string &type, const string &quality) {
+      const json &raw = rawConfig();
+      vector<string> owners;
+      unordered_set<string> seen;
+      vector<string> pending = {spiceql_name};
+
+      while (!pending.empty()) {
+        string current = pending.back();
+        pending.pop_back();
+
+        // Guards against a cycle in deps as well as the diamond that shows up
+        // when two entries inherit from the same parent.
+        if (!seen.insert(current).second || !raw.contains(current)) continue;
+
+        const json &entry = raw[current];
+        if (!entry.is_object()) continue;
+
+        if (entry.contains(type) && entry[type].is_object() && entry[type].contains(quality)) {
+          owners.push_back(current);
+        }
+
+        if (entry.contains("deps")) {
+          for (auto &dep : entry["deps"]) {
+            if (!dep.is_string()) continue;
+            string name = dep.get<string>();
+            // Written as a json pointer ("/moc"). Every dep in the shipped
+            // configs is a single top-level entry, so the leading slash is all
+            // there is to strip.
+            if (!name.empty() && name.front() == '/') name.erase(0, 1);
+            if (!name.empty()) pending.push_back(name);
+          }
+        }
+      }
+      return owners;
     }
   }
 
@@ -512,10 +591,24 @@ namespace SpiceQL {
 
         std::sort(qualities.begin(), qualities.end());
 
-        // The union across qualities, in load order, plus the best tier that
-        // actually contributed to it — which is what gets reported.
+        // The union across qualities, in load order, plus the quality that gets
+        // reported for it. The union is a chain rather than a choice: a smithed
+        // CK carries a tie-point correction but no spacecraft bus attitude, so
+        // the lower tier is not redundant, it is load-bearing. Reporting the
+        // best tier present would therefore overstate the result — a smithed
+        // kernel overlapping one hour of a month-long window would label the
+        // whole month smithed. The lowest tier that contributed is reported
+        // instead, so the quality describes the weakest link the chain depends
+        // on.
         vector<string> union_kernels;
-        Kernel::Quality best_quality = Kernel::Quality::NOQUALITY;
+        Kernel::Quality lowest_quality = Kernel::Quality::NOQUALITY;
+        bool found_quality = false;
+
+        // Each config entry that contributed a tier, mapped to the best tier it
+        // contributed. Reported as <owner>_<type>_quality so a caller can see
+        // what each part of the chain is worth, not just the floor. Ordered for
+        // a stable result.
+        std::map<string, Kernel::Quality> owner_qualities;
 
         // attempt all requested qualities  
         for(auto quality = qualities.begin(); quality != qualities.end(); ++quality) {
@@ -610,8 +703,20 @@ namespace SpiceQL {
             final_time_kernels.push_back(time_indices->file_paths.at(index));
           }
 
-          if (final_time_kernels.size()) { 
-            best_quality = *quality;   // ascending, so the last to contribute wins
+          if (final_time_kernels.size()) {
+            // Ascending, so the first tier to contribute is the lowest one.
+            // NOQUALITY is itself a tier, hence the flag rather than a sentinel.
+            if (!found_quality) {
+              lowest_quality = *quality;
+              found_quality = true;
+            }
+
+            // Ascending again, so plain assignment leaves each owner holding the
+            // best tier it contributed.
+            for (auto &owner : qualityOwners(spiceql_name, Kernel::translateType(type),
+                                             Kernel::translateQuality(*quality))) {
+              owner_qualities[owner] = *quality;
+            }
 
             vector<string> tier;
             if (limitQuality > -1 && limitQuality < final_time_kernels.size()) { 
@@ -633,12 +738,21 @@ namespace SpiceQL {
           SPDLOG_TRACE("NUMBER OF KERNELS FOUND: {}", final_time_kernels.size());  
         }
 
-        if (union_kernels.size()) { 
+        if (union_kernels.size()) {
           kernels[Kernel::translateType(type)] = union_kernels;
-          kernels[qkey] = Kernel::translateQuality(best_quality);
-          SPDLOG_DEBUG("Unioned {} {} kernels across qualities, best quality {}",
+
+          // Owners first, then the searched name. spiceql_name is usually an
+          // owner of its own kernels too, and for that key the floor is what
+          // should be reported — so the write order matters.
+          for (auto &[owner, owner_quality] : owner_qualities) {
+            kernels[owner+"_"+Kernel::translateType(type)+"_quality"] =
+                Kernel::translateQuality(owner_quality);
+          }
+          kernels[qkey] = Kernel::translateQuality(lowest_quality);
+
+          SPDLOG_DEBUG("Unioned {} {} kernels across qualities, reporting lowest quality {}",
                        union_kernels.size(), Kernel::translateType(type),
-                       Kernel::translateQuality(best_quality));
+                       Kernel::translateQuality(lowest_quality));
         }
       }
       else { // text/non time based kernels
