@@ -128,16 +128,6 @@ namespace SpiceQL {
       return std::chrono::duration<double>(DbClock::now() - t0).count();
     }
 
-    // The configs as written on disk, with `deps` still unresolved.
-    //
-    // Config's constructor runs resolveConfigDependencies, which copies an
-    // inherited quality tier into the child entry. That is what makes
-    // lroc/spk/smithed exist in the database at all, but it also erases the fact
-    // that moc is the entry declaring it — and that provenance is what the
-    // per-owner quality keys report. So the raw form is read separately.
-    //
-    // Loaded once per process. search_for_kernelset is hot and otherwise never
-    // touches the config, so this must not become a per-query cost.
     const json &rawConfig() {
       static const json raw = [] {
         json out;
@@ -161,14 +151,6 @@ namespace SpiceQL {
     }
 
 
-    // Every entry in spiceql_name's dependency chain that declares
-    // <type>/<quality>, including spiceql_name itself.
-    //
-    // More than one entry can declare the same tier, and when they do the
-    // resolved list is the merge of all of them rather than an override — lroc
-    // declares ck/reconstructed (soc31, lrolc) and inherits moc's
-    // ck/reconstructed (moc42r), and a search returns kernels from both. So all
-    // of them are owners, not just the nearest.
     vector<string> qualityOwners(const string &spiceql_name, const string &type, const string &quality) {
       const json &raw = rawConfig();
       vector<string> owners;
@@ -296,9 +278,6 @@ namespace SpiceQL {
       SPDLOG_DEBUG("collectFrameInfo: {} built-in frames", nbuiltin);
     }
 
-    // Furnish every mission's frame-defining text kernels, then read the NAIF
-    // body code<->name associations and enumerate kernel-defined frames. This
-    // is the slow, one-time work that runtime resolution then avoids.
     for (auto &el : globalConf.items()) {
       string mission = el.key();
       json textKernels;
@@ -318,9 +297,6 @@ namespace SpiceQL {
       KernelSet ks(textKernels);
       checkNaifErrors();
 
-      // NAIF_BODY_CODE / NAIF_BODY_NAME define bodies, spacecraft, and
-      // instruments (e.g. -85 -> "LRO", -85600 -> "LRO_LROCNACL"). These do not
-      // come back from kplfrm_c, so read the pool directly.
       const SpiceInt ROOM = 5000;
       const SpiceInt LENOUT = 128;
       {
@@ -343,9 +319,6 @@ namespace SpiceQL {
         }
       }
 
-      // Kernel-defined frames (FK TKFRAMEs etc.) for THIS mission's furnished
-      // kernels. The built-ins were done once above; insertFramePair dedupes by
-      // code, so the union is unchanged.
       SPICEINT_CELL(idset, 10000);
       scard_c(0, &idset);
       kplfrm_c(SPICE_FRMTYP_ALL, &idset);

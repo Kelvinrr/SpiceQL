@@ -32,11 +32,6 @@ TEST_F(LroKernelSet, TestInventorySmithed) {
 
 TEST_F(LroMocQualityKernelSet, TestInventoryQualityUnion) { 
   Inventory::create_database();
-  // This window is covered by moc's reconstructed CK (the spacecraft bus) AND by
-  // its smithed one (an LROC tie-point correction). Issue #154: the old search
-  // returned only the better tier, and a smithed CK on its own carries no bus
-  // attitude — so no frame chain could be built and the query failed with
-  // NOFRAMECONNECT even though a usable set existed.
   nlohmann::json kernels = Inventory::search_for_kernelset("moc", {"ck"}, 110000000, 120000000, 
                                                            {"smithed", "reconstructed"}, 
                                                            {"smithed", "reconstructed"}, false);
@@ -50,13 +45,8 @@ TEST_F(LroMocQualityKernelSet, TestInventoryQualityUnion) {
   EXPECT_NE(find(cks.begin(), cks.end(), "moc42r_1111111_1111111_v01.bc"), cks.end());
   EXPECT_NE(find(cks.begin(), cks.end(), "LROC_NPOLE_2017Merged_Lidar2Image_Left_2012_ck.bc"), cks.end());
 
-  // Load order matters: SPICE prefers the last kernel loaded, so the smithed
-  // correction has to come after the bus CK it corrects.
   EXPECT_EQ(cks.back(), "LROC_NPOLE_2017Merged_Lidar2Image_Left_2012_ck.bc");
 
-  // The reported quality is the LOWEST tier that contributed, not the best. The
-  // set only works because the reconstructed bus CK is in it, so calling the
-  // whole thing smithed would promise an accuracy the chain does not have.
   EXPECT_EQ(kernels["moc_ck_quality"], "reconstructed");
 }
 
@@ -76,10 +66,6 @@ TEST_F(LroMocQualityKernelSet, TestInventoryQualityUnionSingleTier) {
 
 TEST_F(LroMocQualityKernelSet, TestInventoryQualityOwnerReporting) {
   Inventory::create_database();
-  // Searching lroc, whose config declares ck/reconstructed and inherits the rest
-  // from moc via deps. The floor reported for lroc is reconstructed, because the
-  // set only works with moc's bus attitude in it — but moc also contributed a
-  // smithed CK, and that is worth reporting rather than hiding behind the floor.
   nlohmann::json kernels = Inventory::search_for_kernelset("lroc", {"ck"}, 110000000, 120000000,
                                                            {"smithed", "reconstructed"},
                                                            {"smithed", "reconstructed"}, false);
@@ -88,9 +74,6 @@ TEST_F(LroMocQualityKernelSet, TestInventoryQualityOwnerReporting) {
   // The searched name reports the weakest link in its chain.
   EXPECT_EQ(kernels["lroc_ck_quality"], "reconstructed");
 
-  // The entry that actually declares the smithed tier reports it. Without this
-  // key a caller cannot tell a chain with a smithed correction in it from one
-  // that is reconstructed throughout.
   ASSERT_TRUE(kernels.contains("moc_ck_quality"));
   EXPECT_EQ(kernels["moc_ck_quality"], "smithed");
 }
