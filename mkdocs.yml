@@ -88,3 +88,18 @@ plugins:
           full-doc: True # if you want to generate full documentation
           doxy-cfg: # standard doxygen configuration (key: value)
             RECURSIVE: false # recursive search in source directories
+  # Writes llms.txt and llms-full.txt to the site root, on build and serve alike.
+  - llmstxt:
+      full_output: llms-full.txt
+      markdown_description: >
+        SpiceQL is a C++ library, with Python bindings, a WebAssembly build and a
+        hosted REST API, for querying, reading and writing NAIF SPICE kernels.
+      sections:
+        Overview:
+          - index.md
+        # SpiceQL's own namespaces and classes only, which leaves out mkdoxy's
+        # source listings, its index pages, and restincurl/std/spdlog.
+        C++ API:
+          - SpiceQLCPPAPI/namespace_spice_q_l*.md
+          - SpiceQLCPPAPI/class_spice_q_l_*.md
+          - SpiceQLCPPAPI/struct_spice_q_l_*.md

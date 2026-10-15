@@ -30,7 +30,7 @@ hide:
 </div>
 
 
-This Library provides a C++ interface querying, reading and writing Naif SPICE kernels. Built on the [Naif Toolkit](https://naif.jpl.nasa.gov/naif/toolkit.html).
+This library provides a C++ interface querying, reading and writing NAIF SPICE kernels. Built on the [NAIF Toolkit](https://naif.jpl.nasa.gov/naif/toolkit.html).
 
 
 ## Try it over the REST API
@@ -153,25 +153,25 @@ Plotly.newPlot(plot, [{
 
 ## Getting Started
 
-We reccomend installing using [miniforge](https://github.com/conda-forge/miniforge) 
+You can install using [Anaconda](https://www.anaconda.com/download/success?reg=skipped) or [miniforge](https://github.com/conda-forge/miniforge).
 
 ```
-mamba install -c conda-forge spiceql
+conda install -c conda-forge spiceql
 ```
 
-To create the inital database, set your required environment variables. 
+To create the initial database, set your required environment variables. 
 
 ```bash 
-# Path to some directory with kernels. SpiceQL searches for them recusively
+# Path to some directory with kernels. SpiceQL searches for them recursively
 export SPICEROOT="path/to/spice/kernels/"
 # anywhere you have write permissions to
 export SPICEQL_CACHE_DIR="path/to/cache/"
 ```
 
-Run `create_database()`, this is more easily done through python. 
+Run `create_database()`; this is more easily done through python. 
 
 !!! warning 
-    This might take serveral hours depending on the number of kernels in your folder
+    This might take several hours depending on the number of kernels in your folder
 
 ```bash 
 SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
@@ -208,7 +208,7 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
     // Make a query and it will return the kernels used 
     auto [orientations, kernels2] = SpiceQL::getTargetOrientations({690201375.8323615}, -74000, -74690, "ctx", {"smithed", "reconstructed"}, false, true);
     std::cout << kernels2.dump(2) << std::endl;
-    // nx4 aray of quaternions 
+    // nx4 array of quaternions 
     std::cout << orientations.size() << std::endl;
     ```
 
@@ -216,10 +216,9 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
 
     SpiceQL compiles to WebAssembly, so the same `api.h` calls run in the browser
     through Embind. Two differences shape the example. The browser build ships no
-    HDF5 inventory, so **there is no kernel search** — `searchForKernelsets` and
+    HDF5 inventory, so **there is no kernel search**, `searchForKernelsets` and
     `searchKernels: true` both throw, and kernels are furnished explicitly. And
-    the WASM signatures take no `mission` argument, for the same reason: with
-    nothing to search there is nothing to aim.
+    the WASM signatures take no `mission` argument since there is no search.
 
     Fetching and furnishing those kernels is the harness's job, not the example's,
     so it happens in the pane above the code and `spiceql` arrives already loaded.
@@ -240,13 +239,6 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
     </div>
 
     ```js
-    // `spiceql` is already loaded with the kernel above furnished, so this is
-    // only the exploitation code. The harness also defaults searchKernels:false
-    // on every call, because kernel search throws in the browser build.
-
-    // The same query as the Python and C++ tabs — CTX relative to the MRO
-    // spacecraft frame — at et 690201375.83, which is 2021-11-14 22:35:06.650.
-    // No mission argument: the WASM signature drops it.
     const { result: orientations } = spiceql.getTargetOrientations(
       [690201375.8323615], -74000, -74690);
 
@@ -254,9 +246,6 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
     console.log('quaternion:', [w, x, y, z]);
     console.log('angular velocity (rad/s):', angularVelocity);
 
-    // Nearly the identity, and the angular velocity is exactly zero — this is a
-    // fixed mounting offset out of the frame kernel, not an attitude that had to
-    // be interpolated from a CK. That is what makes one text kernel enough.
     const degrees = 2 * Math.acos(Math.min(1, Math.abs(w))) * 180 / Math.PI;
     console.log(`a fixed rotation of ${degrees.toFixed(4)} degrees`);
 
@@ -285,7 +274,7 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
 
 ### Online Interface 
 
-Some functions allow for running over the web, these contain the optional parameter `useWeb`. See the [function list](SpiceQLCPPAPI/namespace_spice_q_l.md) for a list of functions with this parameter. 
+Some functions allow for running over the web; these contain the optional parameter `useWeb`. See the [function list](SpiceQLCPPAPI/namespace_spice_q_l.md) for a list of functions with this parameter. 
 
 === "Python"
 
@@ -293,7 +282,7 @@ Some functions allow for running over the web, these contain the optional parame
     import pyspiceql as psql 
 
     # Make a query and it will return the kernels used 
-    orientations, kernels = spql.getTargetOrientations([690201375.8323615], -74000, -74690, "ctx", useWeb=True) 
+    orientations, kernels = psql.getTargetOrientations([690201375.8323615], -74000, -74690, "ctx", useWeb=True) 
     print(kernels)
     print(orientations)
     ```
@@ -307,7 +296,7 @@ Some functions allow for running over the web, these contain the optional parame
     // Make a query and it will return the kernels used 
     auto [orientations, kernels] = SpiceQL::getTargetOrientations({690201375.8323615}, -74000, -74690, "ctx", {"smithed", "reconstructed"}, true);
     std::cout << kernels.dump(2) << std::endl;
-    // nx4 aray of quaternions 
+    // nx4 array of quaternions 
     std::cout << orientations.size() << std::endl;
     ```
 
@@ -338,6 +327,10 @@ Some functions allow for running over the web, these contain the optional parame
 
     Download data from [NAIF](https://naif.jpl.nasa.gov/naif/data_archived.html) 
 
-    You can download using `wget` or similar application. 
+    You can download using `wget` or a similar application. 
 
+## Bots 
 
+<!-- HTML rather than markdown links: llmstxt writes these files after mkdocs
+     validates links, so markdown links to them warn (and fail --strict). -->
+These docs ship with <a href="llms.txt">llms.txt</a> and <a href="llms-full.txt">llms-full.txt</a> for bots to read for learning the library. 
