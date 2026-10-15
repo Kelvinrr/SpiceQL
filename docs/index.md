@@ -25,7 +25,7 @@ hide:
   <iframe src="assets/mars-banner.html"
           scrolling="no"
           loading="lazy"
-          title="Mars Orbit Visualization — SpiceQL">
+          title="Mars Orbit Visualization | SpiceQL">
   </iframe>
 </div>
 
@@ -35,14 +35,16 @@ This library provides a C++ interface querying, reading and writing NAIF SPICE k
 
 ## Try it over the REST API
 
-The plot below is **two years of Cassini's Saturn tour** — 20 000 states that the
+The plot below is **two years of Cassini's Saturn tour**: 20 000 states that the
 [hosted service](https://astrogeology.usgs.gov/apis/spiceql/latest/docs) builds
 out of 37 SPKs. The kernels stay on the server: gigabytes that would never be
 worth shipping to a page, and all that comes back is numbers.
 
-Nothing is fetched until you press **Run** — not the plotting library, not a
+Nothing is fetched until you press **Run**: not the plotting library, not a
 state. Edit the code and run it again as often as you like; the pane above the
 code logs every request the snippet makes, with the points each one returned.
+
+See [API docs](https://astrogeology.usgs.gov/docs/getting-started/using-spiceql/exploring-spiceqls-rest-python-and-cpp-apis/#__tabbed_3_1) for examples of SpiceQL functions. 
 
 <div class="sq-app sq-app--rest" data-sq-rest markdown="1">
 
@@ -50,7 +52,7 @@ code logs every request the snippet makes, with the points each one returned.
   <p class="sq-app__head">
     <span class="sq-app__title">Requests</span>
     <span class="sq-app__hint">Every HTTP call the code makes, in order, with what came
-      back — including the points each one returned. Two epoch conversions, then one
+      back, including the points each one returned. Two epoch conversions, then one
       ranged call that answers with all 20&nbsp;000 states.</span>
   </p>
   <ol class="sq-app__stack" data-sq-log></ol>
@@ -66,8 +68,8 @@ const API = 'https://astrogeology.usgs.gov/apis/spiceql/latest';
 async function spiceql(endpoint, params) {
   const response = await fetch(`${API}/${endpoint}?${new URLSearchParams(params)}`);
   if (!response.ok) throw new Error(`${endpoint}: HTTP ${response.status}`);
-  // SPICE failures come back INSIDE an HTTP 200 — {statusCode: 500, body:
-  // {error}} — so the envelope is what says whether this worked. Skip this and
+  // SPICE failures come back INSIDE an HTTP 200 as {statusCode: 500, body:
+  // {error}}; so the envelope is what says whether this worked. Skip this and
   // a failed call returns a body with no `return`, and the first thing you do
   // with it throws something unrelated several lines later.
   const { statusCode, body } = await response.json();
@@ -75,21 +77,13 @@ async function spiceql(endpoint, params) {
   return body;
 }
 
-// 1. The window: two years of the Saturn tour, inside the equinox mission, and
-//    deliberately all of it later than a ~25 h hole in the Cassini SPKs that
-//    runs from about 2006-11-03 04:00 to 2006-11-04 05:00. getTargetStatesRanged
-//    fails the WHOLE request when any single sampled epoch lands in that hole
-//    (SPICE(SPKINSUFFDATA)), so widening this back across late 2006 only works
-//    with a sample step coarser than the hole itself. At the sample step below
-//    — 58 minutes — the full 2004-2017 tour fails outright.
+// Call utcToEt on datetimes in range. getTargetStatesRanged can fail if there is a hole 
+// anywhere in a step between start stop time window.  
 const { return: etStart } = await spiceql('utcToEt', { utc: '2008-07-01T00:00:00' });
 const { return: etStop }  = await spiceql('utcToEt', { utc: '2010-09-14T00:00:00' });
 
-// 2. One ranged call for the whole window. Ranged rather than a list of epochs
-//    because the service samples the interval itself — a list of 20 000 ETs
-//    would not begin to fit in a URL. limitSpk: -1 lifts the one-SPK default,
-//    which exists for single-image queries and would otherwise cover a few days
-//    of this. 20 000 records is a 58-minute sample and a 2.6 MB response.
+// getTargetStatesRanged calls a vecotized routine. Far more effecient that calling for 
+// ETs indivdidualy as it minimizes calls.  
 const { return: states, kernels } = await spiceql('getTargetStatesRanged', {
   startEt: etStart,
   stopEt: etStop,
@@ -105,8 +99,7 @@ const { return: states, kernels } = await spiceql('getTargetStatesRanged', {
 });
 console.log(`${states.length} states from ${kernels.spk.length} SPKs`);
 
-// 3. Plot it, coloured by date — over two years the orbit precesses and its
-//    apoapsis swings right round, and an undifferentiated tangle hides that.
+// plot code 
 const days = states.map((_, i) => (etStart + (i * (etStop - etStart)) / (states.length - 1)));
 
 Plotly.newPlot(plot, [{
@@ -133,7 +126,7 @@ Plotly.newPlot(plot, [{
 <p class="sq-app__bar">
   <button class="md-button md-button--primary" type="button" data-sq-run>Run</button>
   <span class="sq-app__status" data-sq-status role="status">
-    Nothing to download but numbers — the kernels stay on the server. About
+    Nothing to download but numbers; the kernels stay on the server. About
     1.7&nbsp;MB for the plotting library, then 2.6&nbsp;MB for 20&nbsp;000 states.
   </span>
 </p>
@@ -222,7 +215,7 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
 
     Fetching and furnishing those kernels is the harness's job, not the example's,
     so it happens in the pane above the code and `spiceql` arrives already loaded.
-    Press **Run** — nothing downloads until you do, and the browser caches it, so
+    Press **Run**; nothing downloads until you do, and the browser caches it, so
     a second run is instant.
 
     <div class="sq-exec" data-sq-exec markdown="1">
@@ -262,7 +255,7 @@ SPICEQL_LOG_LEVEL=INFO python -c "import pyspiceql; pyspiceql.create_database()"
       <button class="md-button md-button--primary" type="button" data-sq-run>Run</button>
       <span class="sq-exec__status" data-sq-status role="status">
         Nothing runs until you press Run. The first run fetches about
-        3&nbsp;MB — the WASM module, its config DB, and the one kernel above.
+        3&nbsp;MB: the WASM module, its config DB, and the one kernel above.
       </span>
     </p>
 

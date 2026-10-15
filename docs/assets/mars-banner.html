@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Mars — SpiceQL</title>
+  <title>Mars | SpiceQL</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
@@ -2247,7 +2247,7 @@
           `Every body shown at one epoch, ${sync}.`);
       } else {
         setStatus('cache',
-          `SpiceQL API unreachable for ${craft.length - ok} of ${craft.length} orbits — ` +
+          `SpiceQL API unreachable for ${craft.length - ok} of ${craft.length} orbits; ` +
           `showing cached SPICE data bundled with the docs.`);
       }
     }
@@ -2838,7 +2838,7 @@
       .then(() => {
         // Stay on the neutral pulse until the API verdict is in, so the dot
         // never flashes "failed" during a request that is about to succeed.
-        setStatus('probing', 'Cached SPICE data rendering — contacting the SpiceQL API…');
+        setStatus('probing', 'Cached SPICE data rendering; contacting the SpiceQL API…');
         return trySpiceQL();
       })
       .catch(err => {

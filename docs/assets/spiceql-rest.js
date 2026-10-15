@@ -30,7 +30,7 @@ const CORS_HINT =
   'The API answered, but without an Access-Control-Allow-Origin header, so the'
   + ' browser refused to let this page read it. That header comes from the'
   + ' service (see the CORS middleware in fastapi/app/main.py) and cannot be'
-  + ' added by the load balancer in front of it — a deployment carrying it is'
+  + ' added by the load balancer in front of it; a deployment carrying it is'
   + ' what this applet needs. curl and pyspiceql are unaffected.';
 
 function setUp(root) {
