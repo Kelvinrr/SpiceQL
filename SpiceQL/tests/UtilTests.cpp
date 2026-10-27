@@ -424,6 +424,21 @@ TEST_F(LroKernelSet, UnitTestGetTargetOrientations) {
 }
 
 
+TEST_F(LroKernelSet, UnitTestGetTargetOrientationsMoonME) {
+  vector<double> ets = {110000000};
+  auto [resOrientations, kernels] = getTargetOrientations(ets, 31001, 1, "lroc");
+
+  ASSERT_EQ(resOrientations.size(), 1);
+  ASSERT_EQ(resOrientations.at(0).size(), 7);
+  // moon_080317.tf in the test fixture defines MOON_ME as an identity rotation
+  // from J2000, so the result is the identity quaternion [1, 0, 0, 0].
+  EXPECT_NEAR(resOrientations.at(0)[0], 1.0, 1e-7);
+  EXPECT_NEAR(resOrientations.at(0)[1], 0.0, 1e-7);
+  EXPECT_NEAR(resOrientations.at(0)[2], 0.0, 1e-7);
+  EXPECT_NEAR(resOrientations.at(0)[3], 0.0, 1e-7);
+}
+
+
 TEST_F(LroKernelSet, UnitTestGetTargetOrientation) {
   nlohmann::json testKernelJson;
   testKernelJson["kernels"] = {{ckPath1}, {ckPath2}, {spkPath1}, {spkPath2}, {spkPath3}, {ikPath2}, {fkPath}, {sclkPath}, {lskPath}};
