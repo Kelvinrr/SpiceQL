@@ -145,10 +145,8 @@
         "LRO_SC_BUS"
     ],
     "moon": [
-        "MOON",
         "MOON_ME",
-        "MOON_PA",
-        "IAU_MOON"
+        "MOON_PA"
     ],
     "mrffr": [
         "CHANDRAYAAN-1_MRFFR"
