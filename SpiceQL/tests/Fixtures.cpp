@@ -432,7 +432,7 @@ void LroKernelSet::SetUp() {
   writeTextKernel(basePckPath, "fk", jKeywords);
   
   // define moon_me
-  json moonMeKeywords = {
+  nlohmann::json moonMeKeywords = {
     {"FRAME_MOON_ME", 31001},
     {"FRAME_31001_NAME", "MOON_ME"},
     {"FRAME_31001_CLASS", 4},
